@@ -243,26 +243,30 @@ findPath board from to =
     path |> Maybe.withDefault []
 
 
-createEnemy : Board -> Enemy
-createEnemy board =
-    let
-        startPosition =
-            indexToBoardPosition board startIndex
+startPosition : Board -> BoardPosition
+startPosition board =
+    indexToBoardPosition board startIndex
 
-        postPositions =
-            List.map (indexToBoardPosition board) postIndices ++ [ indexToBoardPosition board goalIndex ]
 
-        addToPath : BoardPosition -> AStar.Path -> AStar.Path
-        addToPath to path =
+findFullPath : Board -> List BoardPosition
+findFullPath board =
+    List.foldl
+        (\to path ->
             case List.Extra.last path of
                 Just from ->
                     path ++ findPath board from to
 
                 Nothing ->
                     path
-    in
-    { position = boardPositionToPosition startPosition
-    , path = List.foldl addToPath [ startPosition ] postPositions
+        )
+        [ startPosition board ]
+        (List.map (indexToBoardPosition board) postIndices ++ [ indexToBoardPosition board goalIndex ])
+
+
+createEnemy : Board -> Enemy
+createEnemy board =
+    { position = boardPositionToPosition (startPosition board)
+    , path = findFullPath board
     }
 
 
