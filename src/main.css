@@ -6,21 +6,67 @@
     https://github.com/halfzebra/create-elm-app/issues/320
 */
 [data-elm-hot="true"] {
-  height: inherit;
+    height: inherit;
+}
+
+*,
+*:before,
+*:after {
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
 }
 
 body {
-  font-family: 'Source Sans Pro', 'Trebuchet MS', 'Lucida Grande', 'Bitstream Vera Sans', 'Helvetica Neue', sans-serif;
-  margin: 0;
-  text-align: center;
-  color: #293c4b;
+    display: flex;
+    justify-content: center;
 }
 
-h1 {
-  font-size: 30px;
+.board {
+    position: relative;
 }
 
-img {
-  margin: 20px 0;
-  max-width: 200px;
+.cell {
+    display: inline-flex;
+    border: 1px solid #00000026;
+    align-items: center;
+    justify-content: center;
+}
+.cell-row {
+    display: flex;
+}
+.cell-grass {
+    background-color: green;
+}
+.cell-path {
+    background-color: brown;
+}
+.cell-start {
+    background-color: blue;
+}
+.cell-goal {
+    background-color: red;
+}
+.cell-post {
+    background-color: black;
+}
+
+
+.cell-grass:hover, .cell-path:hover {
+    opacity: 0.8;
+}
+
+
+.enemy {
+    display: inline-block;
+    background-color: purple;
+    position: absolute;
+    top: 0;
+    pointer-events: none;
+}
+
+.tower {
+    width: 10px;
+    height: 10px;
+    background-color: pink;
 }
