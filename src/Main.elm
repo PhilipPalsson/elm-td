@@ -11,6 +11,10 @@ import List.Extra
 import Set exposing (Set)
 
 
+
+-- 37 * 37
+
+
 boardWidth =
     30
 
@@ -123,19 +127,30 @@ initBoard =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        StepClicked ->
-            ( { model | enemies = step model.enemies }
-            , Cmd.none
-            )
+    let
+        newModel =
+            case msg of
+                StepClicked ->
+                    { model | enemies = step model.enemies }
 
-        CreateEnemyClicked ->
-            ( { model | enemies = createEnemy model }
-            , Cmd.none
-            )
+                CreateEnemyClicked ->
+                    { model | enemies = createEnemy model }
 
-        CellClicked index ->
-            ( { model | board = Array.Extra.update index addTower model.board }, Cmd.none )
+                CellClicked index ->
+                    let
+                        newBoard =
+                            Array.Extra.update index addTower model.board
+
+                        path =
+                            findFullPath newBoard
+                    in
+                    if List.isEmpty path then
+                        model
+
+                    else
+                        { model | board = newBoard }
+    in
+    ( newModel, Cmd.none )
 
 
 step : List Enemy -> List Enemy
@@ -146,25 +161,34 @@ step enemies =
 
 
 availableSteps : Board -> AStar.Position -> Set AStar.Position
-availableSteps cells ( x, y ) =
+availableSteps board ( x, y ) =
     let
-        sameRow index1 index2 =
-            index1 // 30 == index2 // 30
-
         index =
             y * boardWidth + x
 
-        above =
-            index - boardWidth
+        upLeft =
+            index - boardWidth - 1
+
+        up =
+            upLeft + 1
+
+        upRight =
+            up + 1
 
         right =
-            index + 1
+            upRight + boardWidth
 
-        below =
-            index + boardWidth
+        downRight =
+            right + boardWidth
+
+        down =
+            downRight - 1
+
+        downLeft =
+            down - 1
 
         left =
-            index - 1
+            down - boardWidth
 
         walkable : Cell -> Bool
         walkable cell =
@@ -184,26 +208,19 @@ availableSteps cells ( x, y ) =
                 Post ->
                     True
 
-        cellToCellPosition : Cell -> ( Int, Int )
-        cellToCellPosition cell =
-            ( modBy boardWidth cell.index, cell.index // boardWidth )
+        indexToCellPosition : Int -> ( Int, Int )
+        indexToCellPosition i =
+            ( modBy boardWidth i, i // boardWidth )
+
+        wrongRow i =
+            AStar.pythagoreanCost (indexToCellPosition i) (indexToCellPosition index) < 2.0
     in
-    [ Array.get above cells
-    , if sameRow right index then
-        Array.get right cells
-
-      else
-        Nothing
-    , Array.get below cells
-    , if sameRow left index then
-        Array.get left cells
-
-      else
-        Nothing
-    ]
+    [ upLeft, up, upRight, right, downRight, down, downLeft, left ]
+        |> List.filter wrongRow
+        |> List.map (\i -> Array.get i board)
         |> List.filterMap identity
         |> List.filter walkable
-        |> List.map cellToCellPosition
+        |> List.map (.index >> indexToCellPosition)
         |> Set.fromList
 
 
@@ -246,16 +263,24 @@ indexToCellCenterPosition index =
     }
 
 
-findFullPath : Array Cell -> List Position
-findFullPath cells =
+findFullPath : Board -> List Position
+findFullPath board =
     List.foldl
-        (\to path ->
-            case List.Extra.last path of
+        (\to totalPath ->
+            case List.Extra.last totalPath of
                 Just from ->
-                    path ++ findPath cells from to
+                    let
+                        path =
+                            findPath board from to
+                    in
+                    if List.isEmpty path then
+                        []
+
+                    else
+                        totalPath ++ path
 
                 Nothing ->
-                    path
+                    []
         )
         [ indexToCellCenterPosition startIndex ]
         (List.map indexToCellCenterPosition postIndices ++ [ indexToCellCenterPosition goalIndex ])
