@@ -24,7 +24,7 @@ cellSize =
 
 
 stepSize =
-    10
+    5
 
 
 enemySize =
@@ -43,10 +43,6 @@ goalIndex =
     536
 
 
-
----- MODEL ----
-
-
 type Tower
     = Regular
 
@@ -63,16 +59,12 @@ type alias Cell =
     { cellType : CellType, index : Int }
 
 
-type alias BoardPosition =
-    ( Int, Int )
-
-
 type alias Position =
     { x : Int, y : Int }
 
 
 type alias Enemy =
-    { position : Position, path : List BoardPosition }
+    { position : Position, path : List Position }
 
 
 type alias Board =
@@ -83,7 +75,22 @@ type alias Model =
     { board : Board, enemies : List Enemy }
 
 
-initBoard : Array Cell
+type Msg
+    = StepClicked
+    | CreateEnemyClicked
+    | CellClicked Int
+
+
+init : ( Model, Cmd Msg )
+init =
+    ( { board = initBoard
+      , enemies = []
+      }
+    , Cmd.none
+    )
+
+
+initBoard : Board
 initBoard =
     let
         boardType index =
@@ -114,66 +121,38 @@ initBoard =
         (Array.fromList (List.range 0 ((boardWidth * boardHeight) - 1)))
 
 
-cellToBoardPosition : Cell -> BoardPosition
-cellToBoardPosition cell =
-    ( modBy boardWidth cell.index
-    , cell.index // boardWidth
-    )
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        StepClicked ->
+            ( { model | enemies = step model.enemies }
+            , Cmd.none
+            )
+
+        CreateEnemyClicked ->
+            ( { model | enemies = createEnemy model }
+            , Cmd.none
+            )
+
+        CellClicked index ->
+            ( { model | board = Array.Extra.update index addTower model.board }, Cmd.none )
 
 
-boardPositionToPosition : BoardPosition -> Position
-boardPositionToPosition ( x, y ) =
-    { x = (x * cellSize) + (cellSize // 2)
-    , y = (y * cellSize) + (cellSize // 2)
-    }
+step : List Enemy -> List Enemy
+step enemies =
+    enemies
+        |> List.map moveEnemy
+        |> List.Extra.filterNot (.path >> List.isEmpty)
 
 
-indexToBoardPosition : Board -> Int -> BoardPosition
-indexToBoardPosition board index =
-    case Array.get index board of
-        Just cell ->
-            cellToBoardPosition cell
-
-        Nothing ->
-            ( 0, 0 )
-
-
-init : ( Model, Cmd Msg )
-init =
-    let
-        board =
-            initBoard
-    in
-    ( { board = board
-      , enemies = []
-      }
-    , Cmd.none
-    )
-
-
-
----- UPDATE ----
-
-
-type Msg
-    = CellClicked Int
-    | StepClicked
-    | CreateEnemyClicked
-
-
-positionToIndex : BoardPosition -> Int
-positionToIndex ( x, y ) =
-    y * boardWidth + x
-
-
-availableSteps : Board -> BoardPosition -> Set BoardPosition
-availableSteps board position =
+availableSteps : Board -> AStar.Position -> Set AStar.Position
+availableSteps cells ( x, y ) =
     let
         sameRow index1 index2 =
             index1 // 30 == index2 // 30
 
         index =
-            positionToIndex position
+            y * boardWidth + x
 
         above =
             index - boardWidth
@@ -204,94 +183,91 @@ availableSteps board position =
 
                 Post ->
                     True
+
+        cellToCellPosition : Cell -> ( Int, Int )
+        cellToCellPosition cell =
+            ( modBy boardWidth cell.index, cell.index // boardWidth )
     in
-    [ Array.get above board
+    [ Array.get above cells
     , if sameRow right index then
-        Array.get right board
+        Array.get right cells
 
       else
         Nothing
-    , Array.get below board
+    , Array.get below cells
     , if sameRow left index then
-        Array.get left board
+        Array.get left cells
 
       else
         Nothing
     ]
         |> List.filterMap identity
         |> List.filter walkable
-        |> List.map cellToBoardPosition
+        |> List.map cellToCellPosition
         |> Set.fromList
 
 
-findPath : Board -> BoardPosition -> BoardPosition -> List BoardPosition
-findPath board from to =
+findPath : Array Cell -> Position -> Position -> List Position
+findPath cells from to =
     let
+        positionToCellPosition : Position -> ( Int, Int )
+        positionToCellPosition position =
+            ( position.x // cellSize, position.y // cellSize )
+
+        cellPositionToPosition : ( Int, Int ) -> Position
+        cellPositionToPosition ( x, y ) =
+            { x = (x * cellSize) + (cellSize // 2)
+            , y = (y * cellSize) + (cellSize // 2)
+            }
+
         path =
             AStar.findPath
                 AStar.straightLineCost
-                (availableSteps board)
-                from
-                to
-
-        _ =
-            Debug.log "from" from
-
-        _ =
-            Debug.log "to" to
+                (availableSteps cells)
+                (positionToCellPosition from)
+                (positionToCellPosition to)
     in
-    path |> Maybe.withDefault []
+    path
+        |> Maybe.withDefault []
+        |> List.map cellPositionToPosition
 
 
-startPosition : Board -> BoardPosition
-startPosition board =
-    indexToBoardPosition board startIndex
+indexToCellCenterPosition : Int -> Position
+indexToCellCenterPosition index =
+    let
+        x =
+            modBy boardWidth index
+
+        y =
+            index // boardWidth
+    in
+    { x = (x * cellSize) + (cellSize // 2)
+    , y = (y * cellSize) + (cellSize // 2)
+    }
 
 
-findFullPath : Board -> List BoardPosition
-findFullPath board =
+findFullPath : Array Cell -> List Position
+findFullPath cells =
     List.foldl
         (\to path ->
             case List.Extra.last path of
                 Just from ->
-                    path ++ findPath board from to
+                    path ++ findPath cells from to
 
                 Nothing ->
                     path
         )
-        [ startPosition board ]
-        (List.map (indexToBoardPosition board) postIndices ++ [ indexToBoardPosition board goalIndex ])
+        [ indexToCellCenterPosition startIndex ]
+        (List.map indexToCellCenterPosition postIndices ++ [ indexToCellCenterPosition goalIndex ])
 
 
-createEnemy : Board -> Enemy
-createEnemy board =
-    { position = boardPositionToPosition (startPosition board)
-    , path = findFullPath board
-    }
-
-
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        CellClicked index ->
-            ( { model | board = Array.Extra.update index addTower model.board }, Cmd.none )
-
-        StepClicked ->
-            ( { model
-                | enemies =
-                    model.enemies
-                        |> List.map moveEnemy
-                        |> List.Extra.filterNot (.path >> List.isEmpty)
-              }
-            , Cmd.none
-            )
-
-        CreateEnemyClicked ->
-            ( { model
-                | enemies = model.enemies ++ [ createEnemy model.board ]
-              }
-            , Cmd.none
-            )
+createEnemy : Model -> List Enemy
+createEnemy model =
+    model.enemies
+        ++ [ { position = indexToCellCenterPosition startIndex
+             , path = findFullPath model.board
+             }
+           ]
 
 
 addTower : Cell -> Cell
@@ -328,18 +304,18 @@ calculateMovement from to =
         deltaY =
             to.y - from.y
     in
-    ( if deltaX > 5 then
+    ( if deltaX > stepSize then
         1
 
-      else if deltaX < -5 then
+      else if deltaX < -stepSize then
         -1
 
       else
         0
-    , if deltaY > 5 then
+    , if deltaY > stepSize then
         1
 
-      else if deltaY < -5 then
+      else if deltaY < -stepSize then
         -1
 
       else
@@ -353,7 +329,7 @@ moveEnemy ({ position } as enemy) =
         toPosition =
             case enemy.path of
                 next :: _ ->
-                    boardPositionToPosition next
+                    next
 
                 [] ->
                     position
@@ -361,24 +337,40 @@ moveEnemy ({ position } as enemy) =
         ( deltaX, deltaY ) =
             calculateMovement position toPosition
 
-        newPosition : Position
-        newPosition =
+        nextPosition : Position
+        nextPosition =
             { x = position.x + (deltaX * stepSize)
             , y = position.y + (deltaY * stepSize)
             }
 
-        path =
-            if calculateMovement newPosition toPosition == ( 0, 0 ) then
+        ( newPosition, path ) =
+            if calculateMovement nextPosition toPosition == ( 0, 0 ) then
                 --We have reached the position
-                List.tail enemy.path |> Maybe.withDefault []
+                ( toPosition, List.tail enemy.path |> Maybe.withDefault [] )
 
             else
-                enemy.path
+                ( nextPosition, enemy.path )
     in
     { enemy
         | position = newPosition
         , path = path
     }
+
+
+view : Model -> Html Msg
+view model =
+    div
+        []
+        [ viewBoard model
+        , div []
+            [ button [ onClick StepClicked ] [ text "Step" ]
+            , button [ onClick CreateEnemyClicked ] [ text "Enemy" ]
+            ]
+        ]
+
+
+intToPxString value =
+    String.fromInt value ++ "px"
 
 
 groupCells : Array a -> Array (Array a)
@@ -393,35 +385,20 @@ groupCells array =
         (Array.initialize boardHeight identity)
 
 
-
----- VIEW ----
-
-
-view : Model -> Html Msg
-view model =
+viewBoard : Model -> Html Msg
+viewBoard model =
     let
         cells =
             Array.toList
                 (Array.map viewCellGroup (groupCells model.board))
     in
-    div
-        []
-        [ div [ class "board" ]
-            (cells
-                ++ List.map viewEnemy model.enemies
-            )
-        , div []
-            [ button [ onClick StepClicked ] [ text "Step" ]
-            , button [ onClick CreateEnemyClicked ] [ text "Enemy" ]
-            ]
+    div [ class "board" ]
+        [ div [ class "cells" ] cells
+        , div [ class "enemies" ] (List.map viewEnemy model.enemies)
         ]
 
 
-intToPxString value =
-    String.fromInt value ++ "px"
-
-
-viewEnemy : Enemy -> Html Msg
+viewEnemy : Enemy -> Html msg
 viewEnemy enemy =
     div
         [ class "enemy"
@@ -481,10 +458,6 @@ viewCell cell =
 
 viewTower tower =
     [ div [ class "tower" ] [] ]
-
-
-
----- PROGRAM ----
 
 
 main : Program () Model Msg
