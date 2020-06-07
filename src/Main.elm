@@ -166,60 +166,89 @@ availableSteps board ( x, y ) =
         index =
             y * boardWidth + x
 
-        upLeft =
-            index - boardWidth - 1
+        noRowBreak i =
+            AStar.pythagoreanCost (indexToCellPosition i) (indexToCellPosition index) < 2.0
+
+        getCell : Int -> Maybe Cell
+        getCell i =
+            if noRowBreak i then
+                Array.get i board |> Maybe.andThen walkable
+
+            else
+                Nothing
 
         up =
-            upLeft + 1
-
-        upRight =
-            up + 1
+            getCell (index - boardWidth)
 
         right =
-            upRight + boardWidth
-
-        downRight =
-            right + boardWidth
+            getCell (index + 1)
 
         down =
-            downRight - 1
-
-        downLeft =
-            down - 1
+            getCell (index + boardWidth)
 
         left =
-            down - boardWidth
+            getCell (index - 1)
 
-        walkable : Cell -> Bool
+        upLeft =
+            if up /= Nothing || left /= Nothing then
+                getCell (index - boardWidth - 1)
+
+            else
+                Nothing
+
+        upRight =
+            if up /= Nothing || right /= Nothing then
+                getCell (index - boardWidth + 1)
+
+            else
+                Nothing
+
+        downRight =
+            if down /= Nothing || right /= Nothing then
+                getCell (index + boardWidth + 1)
+
+            else
+                Nothing
+
+        downLeft =
+            if down /= Nothing || left /= Nothing then
+                getCell (index + boardWidth - 1)
+
+            else
+                Nothing
+
+        walkable : Cell -> Maybe Cell
         walkable cell =
             case cell.cellType of
                 Path maybeTower ->
-                    maybeTower == Nothing
+                    if maybeTower == Nothing then
+                        Just cell
+
+                    else
+                        Nothing
 
                 Grass maybeTower ->
-                    maybeTower == Nothing
+                    if maybeTower == Nothing then
+                        Just cell
+
+                    else
+                        Nothing
 
                 Start ->
-                    True
+                    Just cell
 
                 Goal ->
-                    True
+                    Just cell
 
                 Post ->
-                    True
+                    Just cell
 
         indexToCellPosition : Int -> ( Int, Int )
         indexToCellPosition i =
             ( modBy boardWidth i, i // boardWidth )
-
-        wrongRow i =
-            AStar.pythagoreanCost (indexToCellPosition i) (indexToCellPosition index) < 2.0
     in
     [ upLeft, up, upRight, right, downRight, down, downLeft, left ]
-        |> List.filter wrongRow
-        |> List.map (\i -> Array.get i board)
         |> List.filterMap identity
-        |> List.filter walkable
         |> List.map (.index >> indexToCellPosition)
         |> Set.fromList
 
