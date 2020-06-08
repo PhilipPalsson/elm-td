@@ -32,7 +32,11 @@ stepSize =
 
 
 enemySize =
-    10
+    16
+
+
+towerSize =
+    16
 
 
 startIndex =
@@ -47,8 +51,28 @@ goalIndex =
     536
 
 
-type Tower
-    = Regular
+type GameState
+    = Level
+    | Build
+
+
+type Selected
+    = TowerSelected Cell Tower
+    | EnemySelected Enemy
+    | NothingSelected
+
+
+type alias Model =
+    { board : Board
+    , enemies : List Enemy
+    , enemyIdCount : Int
+    , state : GameState
+    , selected : Selected
+    }
+
+
+type alias Tower =
+    { damage : Int, totalDamage : Int, range : Int }
 
 
 type CellType
@@ -68,27 +92,28 @@ type alias Position =
 
 
 type alias Enemy =
-    { position : Position, path : List Position }
+    { position : Position, path : List Position, id : Int, hp : Int }
 
 
 type alias Board =
     Array Cell
 
 
-type alias Model =
-    { board : Board, enemies : List Enemy }
-
-
 type Msg
     = StepClicked
     | CreateEnemyClicked
-    | CellClicked Int
+    | BuildCellClicked Cell
+    | TowerClicked Cell Tower
+    | EnemyClicked Enemy
 
 
 init : ( Model, Cmd Msg )
 init =
     ( { board = initBoard
       , enemies = []
+      , enemyIdCount = 0
+      , state = Build
+      , selected = NothingSelected
       }
     , Cmd.none
     )
@@ -134,21 +159,16 @@ update msg model =
                     { model | enemies = step model.enemies }
 
                 CreateEnemyClicked ->
-                    { model | enemies = createEnemy model }
+                    { model | enemies = createEnemy model, enemyIdCount = model.enemyIdCount + 1 }
 
-                CellClicked index ->
-                    let
-                        newBoard =
-                            Array.Extra.update index addTower model.board
+                BuildCellClicked cell ->
+                    { model | board = addTower cell model.board }
 
-                        path =
-                            findFullPath newBoard
-                    in
-                    if List.isEmpty path then
-                        model
+                TowerClicked cell tower ->
+                    { model | selected = TowerSelected cell tower }
 
-                    else
-                        { model | board = newBoard }
+                EnemyClicked enemy ->
+                    { model | selected = EnemySelected enemy }
     in
     ( newModel, Cmd.none )
 
@@ -320,21 +340,43 @@ createEnemy model =
     model.enemies
         ++ [ { position = indexToCellCenterPosition startIndex
              , path = findFullPath model.board
+             , id = model.enemyIdCount
+             , hp = 10
              }
            ]
 
 
-addTower : Cell -> Cell
-addTower cell =
+addTower : Cell -> Board -> Board
+addTower cell board =
+    let
+        newBoard =
+            Array.Extra.update cell.index addTowerToCell board
+
+        path =
+            findFullPath newBoard
+    in
+    if List.isEmpty path then
+        board
+
+    else
+        newBoard
+
+
+addTowerToCell : Cell -> Cell
+addTowerToCell cell =
+    let
+        tower =
+            { damage = 1, totalDamage = 0, range = 200 }
+    in
     case cell.cellType of
         Path Nothing ->
-            { cell | cellType = Path (Just Regular) }
+            { cell | cellType = Path (Just tower) }
 
         Path _ ->
             cell
 
         Grass Nothing ->
-            { cell | cellType = Grass (Just Regular) }
+            { cell | cellType = Grass (Just tower) }
 
         Grass _ ->
             cell
@@ -414,15 +456,40 @@ moveEnemy ({ position } as enemy) =
 view : Model -> Html Msg
 view model =
     div
-        []
-        [ viewBoard model
-        , div []
-            [ button [ onClick StepClicked ] [ text "Step" ]
-            , button [ onClick CreateEnemyClicked ] [ text "Enemy" ]
+        [ class "main" ]
+        [ viewSide model
+        , div [ class "game" ]
+            [ viewBoard model
+            , div []
+                [ button [ onClick StepClicked ] [ text "Step" ]
+                , button [ onClick CreateEnemyClicked ] [ text "Enemy" ]
+                ]
             ]
         ]
 
 
+viewSide : Model -> Html Msg
+viewSide model =
+    let
+        content =
+            case model.selected of
+                TowerSelected _ tower ->
+                    "Tower totalDamage: " ++ String.fromInt tower.damage
+
+                EnemySelected enemy ->
+                    "Enemy hp: "
+                        ++ (List.Extra.find (.id >> (==) enemy.id) model.enemies
+                                |> Maybe.map (.hp >> String.fromInt)
+                                |> Maybe.withDefault "0"
+                           )
+
+                NothingSelected ->
+                    "Nothing"
+    in
+    div [ class "side" ] [ text ("Selected: " ++ content) ]
+
+
+intToPxString : Int -> String
 intToPxString value =
     String.fromInt value ++ "px"
 
@@ -444,36 +511,57 @@ viewBoard model =
     let
         cells =
             Array.toList
-                (Array.map viewCellGroup (groupCells model.board))
+                (Array.map (viewCellGroup model.selected) (groupCells model.board))
     in
     div [ class "board" ]
         [ div [ class "cells" ] cells
-        , div [ class "enemies" ] (List.map viewEnemy model.enemies)
+        , div [ class "enemies" ] (List.map (viewEnemy model.selected) model.enemies)
         ]
 
 
-viewEnemy : Enemy -> Html msg
-viewEnemy enemy =
+viewEnemy : Selected -> Enemy -> Html Msg
+viewEnemy selected enemy =
+    let
+        enemySelected =
+            case selected of
+                TowerSelected _ _ ->
+                    False
+
+                EnemySelected e ->
+                    e.id == enemy.id
+
+                NothingSelected ->
+                    False
+    in
     div
         [ class "enemy"
         , style "width" (intToPxString enemySize)
         , style "height" (intToPxString enemySize)
         , style "left" (intToPxString (enemy.position.x - (enemySize // 2)))
         , style "top" (intToPxString (enemy.position.y - (enemySize // 2)))
+        , class
+            (if enemySelected then
+                "selected"
+
+             else
+                ""
+            )
+        , onClick (EnemyClicked enemy)
         ]
-        []
+        [ div [ class "enemy-inner" ] []
+        ]
 
 
-viewCellGroup : Array Cell -> Html Msg
-viewCellGroup group =
+viewCellGroup : Selected -> Array Cell -> Html Msg
+viewCellGroup selected group =
     div [ class "cell-row" ]
         (Array.toList
-            (Array.map viewCell group)
+            (Array.map (viewCell selected) group)
         )
 
 
-viewCell : Cell -> Html Msg
-viewCell cell =
+viewCell : Selected -> Cell -> Html Msg
+viewCell selected cell =
     let
         ( cellClass, tower ) =
             case cell.cellType of
@@ -491,18 +579,36 @@ viewCell cell =
 
                 Post ->
                     ( "cell-post", Nothing )
+
+        towerSelected =
+            case selected of
+                TowerSelected c _ ->
+                    c.index == cell.index
+
+                EnemySelected _ ->
+                    False
+
+                NothingSelected ->
+                    False
     in
     div
         [ class "cell"
         , class cellClass
-        , onClick (CellClicked cell.index)
+        , onClick
+            (case tower of
+                Just t ->
+                    TowerClicked cell t
+
+                Nothing ->
+                    BuildCellClicked cell
+            )
         , style "width" (intToPxString cellSize)
         , style "height" (intToPxString cellSize)
         ]
         ([]
             ++ (case tower of
                     Just t ->
-                        viewTower t
+                        [ viewTower towerSelected t ]
 
                     Nothing ->
                         []
@@ -510,8 +616,33 @@ viewCell cell =
         )
 
 
-viewTower tower =
-    [ div [ class "tower" ] [] ]
+viewTower : Bool -> Tower -> Html msg
+viewTower selected tower =
+    div
+        [ class "tower"
+        , style "width" (intToPxString towerSize)
+        , style "height" (intToPxString towerSize)
+        , class
+            (if selected then
+                "selected"
+
+             else
+                ""
+            )
+        ]
+        [ div
+            [ class "tower-inner"
+            ]
+            []
+        , div
+            [ class "tower-range"
+            , style "width" (intToPxString tower.range)
+            , style "height" (intToPxString tower.range)
+            , style "top" (intToPxString (towerSize // 2 - (tower.range // 2)))
+            , style "left" (intToPxString (towerSize // 2 - (tower.range // 2)))
+            ]
+            []
+        ]
 
 
 main : Program () Model Msg
