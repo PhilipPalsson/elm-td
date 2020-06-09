@@ -4,7 +4,7 @@ import AStar
 import Array exposing (Array)
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, button, div, text)
+import Html exposing (Html, br, button, div, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
 import List.Extra
@@ -39,6 +39,10 @@ towerSize =
     16
 
 
+stoneSize =
+    16
+
+
 startIndex =
     3
 
@@ -59,6 +63,7 @@ type GameState
 type Selected
     = TowerSelected TowerId
     | EnemySelected EnemyId
+    | StoneSelected Int
     | NothingSelected
 
 
@@ -79,6 +84,7 @@ type alias Model =
     , towerIdCount : TowerId
     , towers : Towers
     , projectiles : Projectiles
+    , hp : Int
     }
 
 
@@ -88,6 +94,7 @@ type alias Tower =
     , range : Int
     , cellIndex : Int
     , cooldown : Int
+    , currentCooldown : Int
     , targets : Int
     }
 
@@ -104,9 +111,14 @@ type alias Towers =
     Dict TowerId Tower
 
 
+type CellObject
+    = CellTower TowerId
+    | Stone
+
+
 type CellType
-    = Path (Maybe TowerId)
-    | Grass (Maybe TowerId)
+    = Path (Maybe CellObject)
+    | Grass (Maybe CellObject)
     | Start
     | Goal
     | Post
@@ -121,7 +133,12 @@ type alias Position =
 
 
 type alias Enemy =
-    { position : Position, path : List Position, id : Int, hp : Int }
+    { position : Position
+    , path : List Position
+    , id : Int
+    , hp : Int
+    , damage : Int
+    }
 
 
 type alias Board =
@@ -133,6 +150,7 @@ type Msg
     | CreateEnemyClicked
     | BuildCellClicked Cell
     | TowerClicked TowerId
+    | StoneClicked Int
     | EnemyClicked Enemy
 
 
@@ -146,6 +164,7 @@ init =
       , towerIdCount = 0
       , towers = Dict.empty
       , projectiles = []
+      , hp = 100
       }
     , Cmd.none
     )
@@ -170,6 +189,9 @@ initBoard =
             then
                 Path Nothing
 
+            else if List.member index [ 1 ] then
+                Grass (Just Stone)
+
             else
                 Grass Nothing
     in
@@ -182,43 +204,55 @@ initBoard =
         (Array.fromList (List.range 0 ((boardWidth * boardHeight) - 1)))
 
 
-solutionInner : TowerId -> Tower -> ( Towers, List Enemy, Projectiles ) -> ( Towers, List Enemy, Projectiles )
-solutionInner towerId tower ( towers, enemies, projectiles ) =
-    let
-        dealDamage enemy =
-            { enemy | hp = enemy.hp - tower.damage }
+towerEnemyInteraction : TowerId -> Tower -> ( Towers, List Enemy, Projectiles ) -> ( Towers, List Enemy, Projectiles )
+towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
+    if tower.currentCooldown == 0 then
+        let
+            dealDamage enemy =
+                { enemy | hp = enemy.hp - tower.damage }
 
-        towerPosition =
-            indexToCellCenterPosition tower.cellIndex
+            towerPosition =
+                indexToCellCenterPosition tower.cellIndex
 
-        enemyInRange : Enemy -> Bool
-        enemyInRange enemy =
-            distance
-                enemy.position
-                towerPosition
-                < toFloat tower.range
+            enemyInRange : Enemy -> Bool
+            enemyInRange enemy =
+                distance
+                    enemy.position
+                    towerPosition
+                    < toFloat tower.range
 
-        ( inRange, outOfRange ) =
-            List.partition enemyInRange enemies
+            ( inRange, outOfRange ) =
+                List.partition enemyInRange enemies
 
-        afterDamage =
-            List.map dealDamage inRange
-                |> List.filter (.hp >> (<) 0)
+            ( targets, outOfTargetCount ) =
+                List.Extra.splitAt tower.targets inRange
 
-        towersAfterDealingDamage =
-            Dict.update towerId
-                (Maybe.map (\t -> { t | totalDamage = t.totalDamage + List.length inRange }))
-                towers
+            afterDamage =
+                List.map dealDamage targets
+                    |> List.filter (.hp >> (<) 0)
 
-        newProjectiles =
-            List.map (\enemy -> { enemyId = enemy.id, from = towerPosition, ttl = 1 }) inRange
-    in
-    ( towersAfterDealingDamage, afterDamage ++ outOfRange, projectiles ++ newProjectiles )
+            towersAfterDealingDamage =
+                Dict.update towerId
+                    (Maybe.map (\t -> { t | totalDamage = t.totalDamage + List.length inRange }))
+                    towers
 
+            towersAfterAddingCooldown =
+                Dict.update towerId
+                    (Maybe.map (\t -> { t | currentCooldown = t.cooldown }))
+                    towersAfterDealingDamage
 
-solution : Towers -> List Enemy -> Projectiles -> ( Towers, List Enemy, Projectiles )
-solution towers enemies projectiles =
-    Dict.foldl solutionInner ( towers, enemies, projectiles ) towers
+            newProjectiles =
+                List.map (\enemy -> { enemyId = enemy.id, from = towerPosition, ttl = 2 }) targets
+        in
+        ( towersAfterAddingCooldown, afterDamage ++ outOfTargetCount ++ outOfRange, projectiles ++ newProjectiles )
+
+    else
+        ( Dict.update towerId
+            (Maybe.map (\t -> { t | currentCooldown = t.currentCooldown - 1 }))
+            towers
+        , enemies
+        , projectiles
+        )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -228,7 +262,7 @@ update msg model =
             case msg of
                 StepClicked ->
                     let
-                        enemiesMoved =
+                        ( enemyDamage, enemiesMoved ) =
                             moveEnemies model.enemies
 
                         agedProjectiles =
@@ -236,10 +270,18 @@ update msg model =
                                 |> List.map (\p -> { p | ttl = p.ttl - 1 })
                                 |> List.filter (.ttl >> (<) 0)
 
-                        ( towerDamageDone, enemiesDamaged, withNewprojectiles ) =
-                            solution model.towers enemiesMoved agedProjectiles
+                        ( towerDamageDone, enemiesDamaged, withNewProjectiles ) =
+                            Dict.foldl
+                                towerEnemyInteraction
+                                ( model.towers, enemiesMoved, agedProjectiles )
+                                model.towers
                     in
-                    { model | enemies = enemiesDamaged, towers = towerDamageDone, projectiles = withNewprojectiles }
+                    { model
+                        | enemies = enemiesDamaged
+                        , towers = towerDamageDone
+                        , projectiles = withNewProjectiles
+                        , hp = model.hp - enemyDamage
+                    }
 
                 CreateEnemyClicked ->
                     { model | enemies = createEnemy model, enemyIdCount = model.enemyIdCount + 1 }
@@ -252,15 +294,24 @@ update msg model =
 
                 EnemyClicked enemy ->
                     { model | selected = EnemySelected enemy.id }
+
+                StoneClicked cellIndex ->
+                    { model | selected = StoneSelected cellIndex }
     in
     ( newModel, Cmd.none )
 
 
-moveEnemies : List Enemy -> List Enemy
+moveEnemies : List Enemy -> ( Int, List Enemy )
 moveEnemies enemies =
-    enemies
-        |> List.map moveEnemy
-        |> List.Extra.filterNot (.path >> List.isEmpty)
+    let
+        ( enemiesReachedGoal, otherEnemies ) =
+            enemies
+                |> List.map moveEnemy
+                |> List.partition (.path >> List.isEmpty)
+    in
+    ( List.foldl (.damage >> (+)) 0 enemiesReachedGoal
+    , otherEnemies
+    )
 
 
 availableSteps : Board -> AStar.Position -> Set AStar.Position
@@ -430,6 +481,7 @@ createEnemy model =
              , path = findFullPath model.board
              , id = model.enemyIdCount
              , hp = 1000
+             , damage = 2
              }
            ]
 
@@ -444,6 +496,7 @@ addTower cell model =
             , range = 100
             , cellIndex = cell.index
             , cooldown = 5
+            , currentCooldown = 0
             , targets = 1
             }
 
@@ -476,13 +529,13 @@ addTowerToCell : Cell -> TowerId -> ( Bool, Cell )
 addTowerToCell cell towerId =
     case cell.cellType of
         Path Nothing ->
-            ( True, { cell | cellType = Path (Just towerId) } )
+            ( True, { cell | cellType = Path (Just (CellTower towerId)) } )
 
         Path _ ->
             ( False, cell )
 
         Grass Nothing ->
-            ( True, { cell | cellType = Grass (Just towerId) } )
+            ( True, { cell | cellType = Grass (Just (CellTower towerId)) } )
 
         Grass _ ->
             ( False, cell )
@@ -597,8 +650,15 @@ viewSide model =
 
                 NothingSelected ->
                     "Nothing"
+
+                StoneSelected int ->
+                    "Stone " ++ String.fromInt int
     in
-    div [ class "side" ] [ text ("Selected: " ++ content) ]
+    div [ class "side" ]
+        [ text ("Hp: " ++ String.fromInt model.hp)
+        , br [] []
+        , text ("Selected: " ++ content)
+        ]
 
 
 intToPxString : Int -> String
@@ -695,13 +755,10 @@ viewEnemy selected enemy =
     let
         enemySelected =
             case selected of
-                TowerSelected _ ->
-                    False
-
                 EnemySelected enemyId ->
                     enemyId == enemy.id
 
-                NothingSelected ->
+                _ ->
                     False
     in
     div
@@ -734,13 +791,13 @@ viewCellGroup selected towers group =
 viewCell : Selected -> Towers -> Cell -> Html Msg
 viewCell selected towers cell =
     let
-        ( cellClass, maybeTowerId ) =
+        ( cellClass, maybeCellObject ) =
             case cell.cellType of
-                Path maybeTowerId_ ->
-                    ( "cell-path", maybeTowerId_ )
+                Path cellObject ->
+                    ( "cell-path", cellObject )
 
-                Grass maybeTowerId_ ->
-                    ( "cell-grass", maybeTowerId_ )
+                Grass cellObject ->
+                    ( "cell-grass", cellObject )
 
                 Start ->
                     ( "cell-start", Nothing )
@@ -751,27 +808,32 @@ viewCell selected towers cell =
                 Post ->
                     ( "cell-post", Nothing )
 
-        tower =
-            Maybe.andThen (\towerId -> Dict.get towerId towers) maybeTowerId
-
-        towerSelected =
+        towerSelected towerId =
             case selected of
-                TowerSelected towerIndex ->
-                    maybeTowerId == Just towerIndex
+                TowerSelected selectedTowerId ->
+                    towerId == selectedTowerId
 
-                EnemySelected _ ->
+                _ ->
                     False
 
-                NothingSelected ->
+        stoneSelected =
+            case selected of
+                StoneSelected cellIndex ->
+                    cellIndex == cell.index
+
+                _ ->
                     False
     in
     div
         [ class "cell"
         , class cellClass
         , onClick
-            (case maybeTowerId of
-                Just t ->
-                    TowerClicked t
+            (case maybeCellObject of
+                Just (CellTower towerId) ->
+                    TowerClicked towerId
+
+                Just Stone ->
+                    StoneClicked cell.index
 
                 Nothing ->
                     BuildCellClicked cell
@@ -780,14 +842,43 @@ viewCell selected towers cell =
         , style "height" (intToPxString cellSize)
         ]
         ([]
-            ++ (case tower of
-                    Just t ->
-                        [ viewTower towerSelected t ]
+            ++ (case maybeCellObject of
+                    Just (CellTower towerId) ->
+                        let
+                            maybeTower =
+                                Dict.get towerId towers
+                        in
+                        case maybeTower of
+                            Just tower ->
+                                [ viewTower (towerSelected towerId) tower ]
+
+                            Nothing ->
+                                []
+
+                    Just Stone ->
+                        [ viewStone stoneSelected ]
 
                     Nothing ->
                         []
                )
         )
+
+
+viewStone : Bool -> Html msg
+viewStone selected =
+    div
+        [ class "stone"
+        , style "width" (intToPxString stoneSize)
+        , style "height" (intToPxString stoneSize)
+        , class
+            (if selected then
+                "selected"
+
+             else
+                ""
+            )
+        ]
+        [ div [ class "stone-inner" ] [] ]
 
 
 viewTower : Bool -> Tower -> Html msg
