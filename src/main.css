@@ -107,3 +107,10 @@ body {
     border-radius: 100%;
     padding: 2px;
 }
+
+.projectile {
+    position: absolute;
+    height: 1px;
+    background-color: orange;
+    transform-origin: top left;
+}
