@@ -93,17 +93,35 @@ body {
 .tower-inner {
     width: 100%;
     height: 100%;
-    background-color: pink;
+    background-color: black;
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+}
+
+.tower.temporary {
+    border: 1px solid white;
+    padding: 2px;
 }
 
 .tower.selected {
     border: 1px solid red;
     padding: 2px;
 }
+
+.bar {
+    height: 60%;
+    width: 10%;
+}
+
+.box {
+    height: 40%;
+    width: 40%;
+}
+
 .tower-range {
     position: absolute;
-    background-color: aqua;
-    opacity: 0.3;
+    border: 1px solid;
     pointer-events: none;
     border-radius: 100%;
 }
@@ -111,7 +129,6 @@ body {
 .projectile {
     position: absolute;
     height: 1px;
-    background-color: orange;
     transform-origin: top left;
 }
 

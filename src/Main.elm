@@ -2,73 +2,35 @@ module Main exposing (main)
 
 import AStar
 import Array exposing (Array)
+import Array.Extra
 import Browser
+import Constants exposing (boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, goalIndex, postIndices, startIndex, stepSize, stoneSize)
 import Dict exposing (Dict)
+import Dict.Extra
+import Helper exposing (intToPxString)
 import Html exposing (Html, br, button, div, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
 import List.Extra
+import Random exposing (Seed, initialSeed, step)
 import Set exposing (Set)
-
-
-
--- 37 * 37
-
-
-boardWidth =
-    30
-
-
-boardHeight =
-    20
-
-
-cellSize =
-    26
-
-
-stepSize =
-    5
-
-
-enemySize =
-    16
-
-
-towerSize =
-    16
-
-
-stoneSize =
-    16
-
-
-startIndex =
-    3
-
-
-postIndices =
-    [ 303, 326, 86, 75, 525 ]
-
-
-goalIndex =
-    536
+import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, projectileColor, towerCombination, towerTypeString, viewTower, viewTowerInformation)
 
 
 type GameState
     = Level
-    | Build
+    | Build Int
 
 
 type Selected
     = TowerSelected TowerId
     | EnemySelected EnemyId
-    | StoneSelected Int
+    | StoneSelected CellIndex
     | NothingSelected
 
 
 type alias Projectile =
-    { enemyId : EnemyId, from : Position, ttl : Int }
+    { enemyId : EnemyId, from : Position, ttl : Int, color : String }
 
 
 type alias Projectiles =
@@ -85,22 +47,9 @@ type alias Model =
     , towers : Towers
     , projectiles : Projectiles
     , hp : Int
+    , level : Int
+    , seed : Seed
     }
-
-
-type alias Tower =
-    { damage : Int
-    , totalDamage : Int
-    , range : Int
-    , cellIndex : Int
-    , cooldown : Int
-    , currentCooldown : Int
-    , targets : Int
-    }
-
-
-type alias TowerId =
-    Int
 
 
 type alias EnemyId =
@@ -114,18 +63,19 @@ type alias Towers =
 type CellObject
     = CellTower TowerId
     | Stone
+    | NoCellObject
 
 
 type CellType
-    = Path (Maybe CellObject)
-    | Grass (Maybe CellObject)
+    = Path CellObject
+    | Grass CellObject
     | Start
     | Goal
     | Post
 
 
 type alias Cell =
-    { cellType : CellType, index : Int }
+    { cellType : CellType, index : CellIndex }
 
 
 type alias Position =
@@ -138,6 +88,7 @@ type alias Enemy =
     , id : Int
     , hp : Int
     , damage : Int
+    , spawnTime : Int
     }
 
 
@@ -145,26 +96,35 @@ type alias Board =
     Array Cell
 
 
+type alias CellIndex =
+    Int
+
+
 type Msg
     = StepClicked
-    | CreateEnemyClicked
     | BuildCellClicked Cell
     | TowerClicked TowerId
-    | StoneClicked Int
+    | StoneClicked CellIndex
     | EnemyClicked Enemy
+    | RemoveTowerButtonClicked TowerId CellIndex
+    | RemoveStoneButtonClicked CellIndex
+    | KeepTowerClicked TowerId
+    | UpgradeTowerClicked TowerId TowerType
 
 
-init : ( Model, Cmd Msg )
-init =
+init : () -> ( Model, Cmd Msg )
+init _ =
     ( { board = initBoard
       , enemies = []
       , enemyIdCount = 0
-      , state = Build
+      , state = Build buildsPerLevel
       , selected = NothingSelected
       , towerIdCount = 0
       , towers = Dict.empty
       , projectiles = []
       , hp = 100
+      , level = 0
+      , seed = initialSeed 1
       }
     , Cmd.none
     )
@@ -187,13 +147,10 @@ initBoard =
                 List.member index
                     [ 3, 33, 63, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 93, 105, 116, 123, 135, 146, 153, 165, 176, 183, 195, 206, 213, 225, 236, 243, 255, 266, 273, 285, 296, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 345, 375, 405, 435, 465, 495, 525, 526, 527, 528, 529, 530, 531, 532, 533, 534, 535, 536 ]
             then
-                Path Nothing
-
-            else if List.member index [ 1 ] then
-                Grass (Just Stone)
+                Path NoCellObject
 
             else
-                Grass Nothing
+                Grass NoCellObject
     in
     Array.map
         (\i ->
@@ -221,30 +178,64 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
                     towerPosition
                     < toFloat tower.range
 
+            ( spawned, notSpawned ) =
+                List.partition (.spawnTime >> (==) 0) enemies
+
             ( inRange, outOfRange ) =
-                List.partition enemyInRange enemies
+                List.partition enemyInRange spawned
 
             ( targets, outOfTargetCount ) =
                 List.Extra.splitAt tower.targets inRange
 
             afterDamage =
                 List.map dealDamage targets
-                    |> List.filter (.hp >> (<) 0)
 
+            -- TODO this isn't calculating correctly
             towersAfterDealingDamage =
                 Dict.update towerId
-                    (Maybe.map (\t -> { t | totalDamage = t.totalDamage + List.length inRange }))
+                    (Maybe.map (\t -> { t | totalDamage = t.totalDamage + List.length targets }))
                     towers
 
             towersAfterAddingCooldown =
                 Dict.update towerId
-                    (Maybe.map (\t -> { t | currentCooldown = t.cooldown }))
+                    (Maybe.map
+                        (\t ->
+                            { t
+                                | currentCooldown =
+                                    if List.isEmpty targets then
+                                        0
+
+                                    else
+                                        t.cooldown
+                            }
+                        )
+                    )
                     towersAfterDealingDamage
 
             newProjectiles =
-                List.map (\enemy -> { enemyId = enemy.id, from = towerPosition, ttl = 2 }) targets
+                List.map
+                    (\enemy ->
+                        { enemyId = enemy.id
+                        , from = towerPosition
+                        , ttl = 2
+                        , color = projectileColor tower.towerType
+                        }
+                    )
+                    targets
+
+            _ =
+                Debug.log "targets" targets
+
+            _ =
+                Debug.log "afterDamage" afterDamage
+
+            _ =
+                Debug.log "newProjectiles" newProjectiles
         in
-        ( towersAfterAddingCooldown, afterDamage ++ outOfTargetCount ++ outOfRange, projectiles ++ newProjectiles )
+        ( towersAfterAddingCooldown
+        , afterDamage ++ outOfTargetCount ++ outOfRange ++ notSpawned
+        , projectiles ++ newProjectiles
+        )
 
     else
         ( Dict.update towerId
@@ -255,6 +246,25 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
         )
 
 
+removeCellObject : Cell -> Cell
+removeCellObject cell =
+    case cell.cellType of
+        Path _ ->
+            { cell | cellType = Path NoCellObject }
+
+        Grass _ ->
+            { cell | cellType = Grass NoCellObject }
+
+        Start ->
+            cell
+
+        Goal ->
+            cell
+
+        Post ->
+            cell
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
@@ -262,32 +272,50 @@ update msg model =
             case msg of
                 StepClicked ->
                     let
+                        aliveEnemies =
+                            model.enemies
+                                |> List.filter (.hp >> (<) 0)
+
                         ( enemyDamage, enemiesMoved ) =
-                            moveEnemies model.enemies
+                            moveEnemies aliveEnemies
 
                         agedProjectiles =
                             model.projectiles
                                 |> List.map (\p -> { p | ttl = p.ttl - 1 })
                                 |> List.filter (.ttl >> (<) 0)
 
-                        ( towerDamageDone, enemiesDamaged, withNewProjectiles ) =
+                        ( towers, enemies, projectiles ) =
                             Dict.foldl
                                 towerEnemyInteraction
                                 ( model.towers, enemiesMoved, agedProjectiles )
                                 model.towers
+
+                        state =
+                            if not (List.isEmpty model.enemies) && List.isEmpty enemies then
+                                Build buildsPerLevel
+
+                            else
+                                model.state
                     in
                     { model
-                        | enemies = enemiesDamaged
-                        , towers = towerDamageDone
-                        , projectiles = withNewProjectiles
+                        | enemies = enemies
+                        , towers = towers
+                        , projectiles = projectiles
                         , hp = model.hp - enemyDamage
+                        , state = state
                     }
 
-                CreateEnemyClicked ->
-                    { model | enemies = createEnemy model, enemyIdCount = model.enemyIdCount + 1 }
-
                 BuildCellClicked cell ->
-                    addTower cell model
+                    case model.state of
+                        Level ->
+                            model
+
+                        Build towersLeft ->
+                            if towersLeft > 0 then
+                                addTower cell model towersLeft
+
+                            else
+                                model
 
                 TowerClicked towerId ->
                     { model | selected = TowerSelected towerId }
@@ -297,20 +325,107 @@ update msg model =
 
                 StoneClicked cellIndex ->
                     { model | selected = StoneSelected cellIndex }
+
+                RemoveTowerButtonClicked towerId cellIndex ->
+                    { model
+                        | towers = Dict.remove towerId model.towers
+                        , board = Array.Extra.update cellIndex removeCellObject model.board
+                        , selected = NothingSelected
+                    }
+
+                RemoveStoneButtonClicked cellIndex ->
+                    { model
+                        | board = Array.Extra.update cellIndex removeCellObject model.board
+                        , selected = NothingSelected
+                    }
+
+                KeepTowerClicked towerToKeepId ->
+                    keepTower towerToKeepId model
+
+                UpgradeTowerClicked towerId towerType ->
+                    upgradeTower model towerId towerType
     in
     ( newModel, Cmd.none )
+
+
+upgradeTower : Model -> TowerId -> TowerType -> Model
+upgradeTower model towerId upgradeTo =
+    let
+        updatedTowers =
+            case Dict.get towerId model.towers of
+                Just tower ->
+                    List.filter ((/=) tower.towerType) (towerCombination upgradeTo)
+                        |> List.map
+                            (\towerType ->
+                                Dict.Extra.find
+                                    (\_ t -> t.towerType == towerType)
+                                    model.towers
+                            )
+                        |> List.filterMap identity
+                        |> List.map Tuple.first
+                        |> List.foldl (\id towers -> Dict.remove id towers) model.towers
+                        |> Dict.update towerId (Maybe.map (.cellIndex >> createTower upgradeTo))
+
+                Nothing ->
+                    model.towers
+    in
+    { model | towers = updatedTowers }
+
+
+spawnEnemies model =
+    List.range 0 (enemiesPerLevel - 1)
+        |> List.map (\count -> ( count, count * 5 ))
+        |> List.map (\( count, cooldown ) -> createEnemy model.board (model.enemyIdCount + count) cooldown)
+
+
+keepTower : TowerId -> Model -> Model
+keepTower towerToKeepId model =
+    let
+        afterRemovingTemporaryFlag =
+            Dict.update
+                towerToKeepId
+                (Maybe.map
+                    (\tower ->
+                        { tower | temporary = False }
+                    )
+                )
+                model.towers
+
+        ( temporary, toKeep ) =
+            Dict.partition (\_ tower -> tower.temporary) afterRemovingTemporaryFlag
+
+        boardWithStones =
+            temporary
+                |> Dict.values
+                |> List.map .cellIndex
+                |> List.foldl addStoneToCell model.board
+    in
+    { model
+        | towers = toKeep
+        , board = boardWithStones
+        , state = Level
+        , enemies = spawnEnemies model
+        , enemyIdCount = model.enemyIdCount + enemiesPerLevel
+        , level = model.level + 1
+    }
 
 
 moveEnemies : List Enemy -> ( Int, List Enemy )
 moveEnemies enemies =
     let
+        ( spawnedEnemies, notSpawnedEnemies ) =
+            List.partition (.spawnTime >> (==) 0) enemies
+
         ( enemiesReachedGoal, otherEnemies ) =
-            enemies
+            spawnedEnemies
                 |> List.map moveEnemy
                 |> List.partition (.path >> List.isEmpty)
+
+        enemiesLeft =
+            notSpawnedEnemies ++ otherEnemies
     in
     ( List.foldl (.damage >> (+)) 0 enemiesReachedGoal
-    , otherEnemies
+    , List.map (\e -> { e | spawnTime = max 0 (e.spawnTime - 1) }) enemiesLeft
     )
 
 
@@ -375,14 +490,14 @@ availableSteps board ( x, y ) =
         walkable cell =
             case cell.cellType of
                 Path maybeTower ->
-                    if maybeTower == Nothing then
+                    if maybeTower == NoCellObject then
                         Just cell
 
                     else
                         Nothing
 
                 Grass maybeTower ->
-                    if maybeTower == Nothing then
+                    if maybeTower == NoCellObject then
                         Just cell
 
                     else
@@ -474,31 +589,25 @@ findFullPath board =
     List.tail fullPath |> Maybe.withDefault []
 
 
-createEnemy : Model -> List Enemy
-createEnemy model =
-    model.enemies
-        ++ [ { position = indexToCellCenterPosition startIndex
-             , path = findFullPath model.board
-             , id = model.enemyIdCount
-             , hp = 1000
-             , damage = 2
-             }
-           ]
+createEnemy : Board -> EnemyId -> Int -> Enemy
+createEnemy board enemyId spawnTime =
+    { position = indexToCellCenterPosition startIndex
+    , path = findFullPath board
+    , id = enemyId
+    , hp = 500
+    , damage = 2
+    , spawnTime = spawnTime
+    }
 
 
-addTower : Cell -> Model -> Model
-addTower cell model =
+addTower : Cell -> Model -> Int -> Model
+addTower cell model towersLeft =
     let
-        tower : Tower
+        ( seed, towerType ) =
+            getTowerType model.seed
+
         tower =
-            { damage = 1
-            , totalDamage = 0
-            , range = 100
-            , cellIndex = cell.index
-            , cooldown = 5
-            , currentCooldown = 0
-            , targets = 1
-            }
+            createTower towerType cell.index
 
         ( towerAdded, cellWithTower ) =
             addTowerToCell cell model.towerIdCount
@@ -509,8 +618,11 @@ addTower cell model =
         pathAfterAddingTower =
             not (List.isEmpty (findFullPath boardWithTower))
 
+        success =
+            towerAdded && pathAfterAddingTower
+
         ( updatedBoard, towerIdCount, towers ) =
-            if towerAdded && pathAfterAddingTower then
+            if success then
                 ( boardWithTower
                 , model.towerIdCount + 1
                 , Dict.insert model.towerIdCount tower model.towers
@@ -521,21 +633,42 @@ addTower cell model =
                 , model.towerIdCount
                 , model.towers
                 )
+
+        state =
+            if success then
+                Build (towersLeft - 1)
+
+            else
+                model.state
+
+        selected =
+            if success then
+                TowerSelected model.towerIdCount
+
+            else
+                NothingSelected
     in
-    { model | board = updatedBoard, towerIdCount = towerIdCount, towers = towers }
+    { model
+        | board = updatedBoard
+        , towerIdCount = towerIdCount
+        , towers = towers
+        , state = state
+        , selected = selected
+        , seed = seed
+    }
 
 
 addTowerToCell : Cell -> TowerId -> ( Bool, Cell )
 addTowerToCell cell towerId =
     case cell.cellType of
-        Path Nothing ->
-            ( True, { cell | cellType = Path (Just (CellTower towerId)) } )
+        Path NoCellObject ->
+            ( True, { cell | cellType = Path (CellTower towerId) } )
 
         Path _ ->
             ( False, cell )
 
-        Grass Nothing ->
-            ( True, { cell | cellType = Grass (Just (CellTower towerId)) } )
+        Grass NoCellObject ->
+            ( True, { cell | cellType = Grass (CellTower towerId) } )
 
         Grass _ ->
             ( False, cell )
@@ -548,6 +681,30 @@ addTowerToCell cell towerId =
 
         Post ->
             ( False, cell )
+
+
+addStoneToCell : CellIndex -> Board -> Board
+addStoneToCell cellIndex board =
+    let
+        newCell : Cell -> Cell
+        newCell cell =
+            case cell.cellType of
+                Path _ ->
+                    { cell | cellType = Path Stone }
+
+                Grass _ ->
+                    { cell | cellType = Grass Stone }
+
+                Start ->
+                    cell
+
+                Goal ->
+                    cell
+
+                Post ->
+                    cell
+    in
+    Array.Extra.update cellIndex newCell board
 
 
 calculateMovement : Position -> Position -> ( Int, Int )
@@ -620,50 +777,102 @@ view model =
         , div [ class "game" ]
             [ viewBoard model
             , div []
-                [ button [ onClick StepClicked ] [ text "Step" ]
-                , button [ onClick CreateEnemyClicked ] [ text "Enemy" ]
-                ]
+                (if model.state == Level then
+                    [ button [ onClick StepClicked ] [ text "Step" ]
+                    ]
+
+                 else
+                    []
+                )
             ]
         ]
+
+
+viewSelectedTowerInfo : Model -> Tower -> TowerId -> Html Msg
+viewSelectedTowerInfo model tower towerId =
+    let
+        upgrades : List TowerType
+        upgrades =
+            if model.state == Level then
+                availableUpgrades (List.map .towerType (Dict.values model.towers)) tower.towerType
+
+            else
+                []
+    in
+    div []
+        ([ text ("Selected tower totalDamage: " ++ String.fromInt tower.totalDamage)
+         , if tower.temporary then
+            if model.state == Build 0 then
+                button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
+
+            else
+                text ""
+
+           else
+            button [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ] [ text "Remove" ]
+         ]
+            ++ List.map
+                (\upgrade ->
+                    button
+                        [ onClick (UpgradeTowerClicked towerId upgrade) ]
+                        [ text (towerTypeString upgrade) ]
+                )
+                upgrades
+        )
 
 
 viewSide : Model -> Html Msg
 viewSide model =
     let
+        stateString =
+            case model.state of
+                Level ->
+                    "level " ++ String.fromInt model.level
+
+                Build towersLeft ->
+                    "build " ++ String.fromInt towersLeft
+
         content =
             case model.selected of
                 TowerSelected towerId ->
                     case Dict.get towerId model.towers of
                         Just tower ->
-                            "Tower totalDamage: " ++ String.fromInt tower.totalDamage
+                            viewSelectedTowerInfo model tower towerId
 
                         Nothing ->
-                            "Nothing"
+                            text "Nothing"
 
                 EnemySelected enemyId ->
                     case List.Extra.find (.id >> (==) enemyId) model.enemies of
                         Just enemy ->
-                            "Enemy hp: " ++ String.fromInt enemy.hp
+                            text ("Selected enemy hp: " ++ String.fromInt enemy.hp)
 
                         Nothing ->
-                            "Nothing"
+                            text "Nothing"
 
                 NothingSelected ->
-                    "Nothing"
+                    text "Nothing"
 
                 StoneSelected int ->
-                    "Stone " ++ String.fromInt int
+                    div []
+                        [ text ("Selected stone " ++ String.fromInt int)
+                        , button [ onClick (RemoveStoneButtonClicked int) ] [ text "Remove" ]
+                        ]
+
+        ( temporaryTowerTypes, existingTowerTypes ) =
+            model.towers |> Dict.values |> List.partition .temporary
+
+        towerTypes towers =
+            List.map .towerType towers
     in
     div [ class "side" ]
-        [ text ("Hp: " ++ String.fromInt model.hp)
+        [ text ("State: " ++ stateString)
         , br [] []
-        , text ("Selected: " ++ content)
+        , text ("Hp: " ++ String.fromInt model.hp)
+        , br [] []
+        , content
+        , viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
         ]
-
-
-intToPxString : Int -> String
-intToPxString value =
-    String.fromInt value ++ "px"
 
 
 groupCells : Array a -> Array (Array a)
@@ -684,11 +893,14 @@ viewBoard model =
         cells =
             Array.toList
                 (Array.map (viewCellGroup model.selected model.towers) (groupCells model.board))
+
+        visibleEnemies =
+            List.filter (.spawnTime >> (==) 0) model.enemies
     in
     div [ class "board" ]
         [ div [ class "cells" ] cells
-        , div [ class "enemies" ] (List.map (viewEnemy model.selected) model.enemies)
-        , div [ class "projectiles" ] (List.map (viewProjectile model.enemies) model.projectiles)
+        , div [ class "enemies" ] (List.map (viewEnemy model.selected) visibleEnemies)
+        , div [ class "projectiles" ] (List.map (viewProjectile visibleEnemies) model.projectiles)
         ]
 
 
@@ -742,6 +954,7 @@ viewProjectile enemies projectile =
                 , style "left" (intToPxString left)
                 , style "top" (intToPxString top)
                 , style "width" width
+                , style "background-color" projectile.color
                 , style "transform" ("rotate(" ++ String.fromFloat (angle - pi / 2) ++ "rad)")
                 ]
                 []
@@ -791,22 +1004,22 @@ viewCellGroup selected towers group =
 viewCell : Selected -> Towers -> Cell -> Html Msg
 viewCell selected towers cell =
     let
-        ( cellClass, maybeCellObject ) =
+        ( cellClass, cellObject ) =
             case cell.cellType of
-                Path cellObject ->
-                    ( "cell-path", cellObject )
+                Path cellObject_ ->
+                    ( "cell-path", cellObject_ )
 
-                Grass cellObject ->
-                    ( "cell-grass", cellObject )
+                Grass cellObject_ ->
+                    ( "cell-grass", cellObject_ )
 
                 Start ->
-                    ( "cell-start", Nothing )
+                    ( "cell-start", NoCellObject )
 
                 Goal ->
-                    ( "cell-goal", Nothing )
+                    ( "cell-goal", NoCellObject )
 
                 Post ->
-                    ( "cell-post", Nothing )
+                    ( "cell-post", NoCellObject )
 
         towerSelected towerId =
             case selected of
@@ -828,22 +1041,22 @@ viewCell selected towers cell =
         [ class "cell"
         , class cellClass
         , onClick
-            (case maybeCellObject of
-                Just (CellTower towerId) ->
+            (case cellObject of
+                CellTower towerId ->
                     TowerClicked towerId
 
-                Just Stone ->
+                Stone ->
                     StoneClicked cell.index
 
-                Nothing ->
+                NoCellObject ->
                     BuildCellClicked cell
             )
         , style "width" (intToPxString cellSize)
         , style "height" (intToPxString cellSize)
         ]
         ([]
-            ++ (case maybeCellObject of
-                    Just (CellTower towerId) ->
+            ++ (case cellObject of
+                    CellTower towerId ->
                         let
                             maybeTower =
                                 Dict.get towerId towers
@@ -855,10 +1068,10 @@ viewCell selected towers cell =
                             Nothing ->
                                 []
 
-                    Just Stone ->
+                    Stone ->
                         [ viewStone stoneSelected ]
 
-                    Nothing ->
+                    NoCellObject ->
                         []
                )
         )
@@ -881,40 +1094,11 @@ viewStone selected =
         [ div [ class "stone-inner" ] [] ]
 
 
-viewTower : Bool -> Tower -> Html msg
-viewTower selected tower =
-    div
-        [ class "tower"
-        , style "width" (intToPxString towerSize)
-        , style "height" (intToPxString towerSize)
-        , class
-            (if selected then
-                "selected"
-
-             else
-                ""
-            )
-        ]
-        [ div
-            [ class "tower-inner"
-            ]
-            []
-        , div
-            [ class "tower-range"
-            , style "width" (intToPxString (tower.range * 2))
-            , style "height" (intToPxString (tower.range * 2))
-            , style "top" (intToPxString (towerSize // 2 - ((tower.range * 2) // 2)))
-            , style "left" (intToPxString (towerSize // 2 - ((tower.range * 2) // 2)))
-            ]
-            []
-        ]
-
-
 main : Program () Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> init
+        , init = init
         , update = update
         , subscriptions = always Sub.none
         }
