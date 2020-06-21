@@ -1,8 +1,8 @@
 module Tower exposing (..)
 
-import Constants exposing (towerSize)
+import Constants exposing (cellSize)
 import Helper exposing (intToPxString)
-import Html exposing (Html, div, h1, h3, span, text)
+import Html exposing (Html, div, h3, span, table, td, text, th, tr)
 import Html.Attributes exposing (class, style)
 import List.Extra
 import Random exposing (Seed)
@@ -41,6 +41,13 @@ maxTowerLevel =
 
 type CombinedTower
     = Purple
+    | White
+    | Pink
+    | Yellow
+    | Orange
+    | BigGreen
+    | BigRed
+    | BigBlue
 
 
 type TowerType
@@ -55,7 +62,28 @@ basicTowers =
 
 combinedTowers : List TowerType
 combinedTowers =
-    [ Combined Purple ]
+    [ Combined Purple
+    , Combined White
+    , Combined Pink
+    , Combined Yellow
+    , Combined Orange
+    , Combined BigGreen
+    , Combined BigRed
+    , Combined BigBlue
+    ]
+
+
+colorToCssString : Color -> String
+colorToCssString color =
+    case color of
+        Green ->
+            "green"
+
+        Red ->
+            "red"
+
+        Blue ->
+            "blue"
 
 
 colorToString : Color -> String
@@ -71,14 +99,35 @@ colorToString color =
             "Blue"
 
 
-projectileColor : TowerType -> String
-projectileColor towerType =
+towerTypeToCssString : TowerType -> String
+towerTypeToCssString towerType =
     case towerType of
         Base color _ ->
-            colorToString color
+            colorToCssString color
 
         Combined Purple ->
             "purple"
+
+        Combined White ->
+            "white"
+
+        Combined Pink ->
+            "pink"
+
+        Combined Yellow ->
+            "yellow"
+
+        Combined Orange ->
+            "orange"
+
+        Combined BigGreen ->
+            "green"
+
+        Combined BigRed ->
+            "red"
+
+        Combined BigBlue ->
+            "blue"
 
 
 towerTypeString : TowerType -> String
@@ -95,7 +144,7 @@ getTowerType : Seed -> ( Seed, TowerType )
 getTowerType seed =
     let
         chances =
-            [ 100, 0, 0, 0 ]
+            [ 25, 25, 25, 25 ]
 
         --[ 60, 20, 12, 8 ]
         splitInFour value =
@@ -143,12 +192,54 @@ combinedTowerTypeString combinedTowerType =
         Purple ->
             "Purple"
 
+        White ->
+            "White"
+
+        Pink ->
+            "Pink"
+
+        Yellow ->
+            "Yellow"
+
+        Orange ->
+            "Orange"
+
+        BigGreen ->
+            "Big Green"
+
+        BigRed ->
+            "Big Red"
+
+        BigBlue ->
+            "Big Blue"
+
 
 towerCombination : TowerType -> List TowerType
 towerCombination towerType =
     case towerType of
         Combined Purple ->
-            [ Base Blue 1, Base Red 1 ]
+            [ Base Blue 1, Base Red 1, Base Red 2 ]
+
+        Combined White ->
+            [ Base Blue 1, Base Red 1, Base Green 1 ]
+
+        Combined Pink ->
+            [ Combined White, Base Red 1, Combined Purple ]
+
+        Combined Yellow ->
+            [ Base Green 1, Base Green 2, Base Red 1 ]
+
+        Combined Orange ->
+            [ Combined Yellow, Base Red 1, Base Red 2 ]
+
+        Combined BigGreen ->
+            [ Base Green 1, Base Green 2, Base Green 3 ]
+
+        Combined BigRed ->
+            [ Base Red 1, Base Red 2, Base Red 3 ]
+
+        Combined BigBlue ->
+            [ Base Blue 1, Base Blue 2, Base Blue 3 ]
 
         Base _ _ ->
             []
@@ -173,92 +264,106 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
 
         have towerType =
             List.member towerType existingTowerTypes
+
+        baseTower : TowerType -> Html msg
+        baseTower towerType =
+            let
+                tower =
+                    createTower towerType False 0
+            in
+            div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
+                [ div [ class "tower-image" ]
+                    [ viewTower False tower
+                    ]
+                , table [ class "tower-info" ]
+                    [ tr []
+                        [ th [] [ text "Damage" ]
+                        , th [] [ text "Targets" ]
+                        , th [] [ text "Range" ]
+                        , th [] [ text "Cooldown" ]
+                        , th [] [ text "Max dps" ]
+                        ]
+                    , tr []
+                        [ td [] [ text (String.fromInt tower.damage) ]
+                        , td [] [ text (String.fromInt tower.targets) ]
+                        , td [] [ text (String.fromInt tower.range) ]
+                        , td [] [ text (String.fromInt tower.cooldown) ]
+                        , td [] [ text (String.fromInt (round (toFloat tower.damage * (1 / toFloat tower.cooldown)))) ]
+                        ]
+                    ]
+                ]
+
+        combinedTower : TowerType -> Html msg
+        combinedTower towerType =
+            let
+                tower =
+                    createTower towerType False 0
+
+                combinations =
+                    towerCombination towerType
+            in
+            div [ class "tower-block tower-block-combined", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
+                [ div [ class "tower-block-inner" ]
+                    [ div [ class "tower-image" ]
+                        [ viewTower False tower
+                        ]
+                    , table [ class "tower-info" ]
+                        [ tr []
+                            [ th [] [ text "Damage" ]
+                            , th [] [ text "Targets" ]
+                            , th [] [ text "Range" ]
+                            , th [] [ text "Cooldown" ]
+                            , th [] [ text "Max dps" ]
+                            ]
+                        , tr []
+                            [ td [] [ text (String.fromInt tower.damage) ]
+                            , td [] [ text (String.fromInt tower.targets) ]
+                            , td [] [ text (String.fromInt tower.range) ]
+                            , td [] [ text (String.fromInt tower.cooldown) ]
+                            , td [] [ text (String.fromInt (round (toFloat tower.damage * (1 / toFloat tower.cooldown)))) ]
+                            ]
+                        ]
+                    ]
+                , div [ class "tower-images" ]
+                    (List.map
+                        (\tt ->
+                            div
+                                [ class "tower-image"
+                                , class
+                                    (towerInfoClass (haveTemporarily tt) (have tt))
+                                ]
+                                [ viewTower False (createTower tt False 0) ]
+                        )
+                        combinations
+                    )
+                ]
     in
     div []
-        ([ h3 [] [ text "Base towers" ] ]
-            ++ List.map
-                (\towerType ->
-                    viewBaseTower
-                        (haveTemporarily towerType)
-                        (have towerType)
-                        towerType
-                )
-                basicTowers
-            ++ [ h3 [] [ text "Combined towers" ] ]
-            ++ List.map
-                (\( towerType, combinations ) ->
-                    case towerType of
-                        Combined Purple ->
-                            viewTowerCombination
-                                temporaryTowerTypes
-                                existingTowerTypes
-                                ( towerType, combinations )
-
-                        Base _ _ ->
-                            div [] []
-                )
-                towerCombinations
-        )
+        [ h3 []
+            [ text "Base towers"
+            ]
+        , div [ class "tower-list" ] (List.map baseTower basicTowers)
+        , h3 []
+            [ text "Combined towers"
+            ]
+        , div [ class "tower-list" ] (List.map combinedTower combinedTowers)
+        ]
 
 
-towerInfoColor : Bool -> Bool -> String
-towerInfoColor haveTemporarily have =
+towerInfoClass : Bool -> Bool -> String
+towerInfoClass haveTemporarily have =
     if have then
-        "green"
+        "have"
 
     else if haveTemporarily then
-        "orange"
+        "have-temporarily"
 
     else
-        "black"
+        ""
 
 
-viewBaseTower : Bool -> Bool -> TowerType -> Html msg
-viewBaseTower haveTemporarily have towerType =
-    span
-        [ style "margin-right" "5px"
-        , style "color" (towerInfoColor haveTemporarily have)
-        ]
-        [ text (towerTypeString towerType) ]
-
-
-viewTowerCombination : List TowerType -> List TowerType -> ( TowerType, List TowerType ) -> Html msg
-viewTowerCombination temporaryTowerTypes existingTowerTypes ( towerType, combinations ) =
-    let
-        haveTemporarily t =
-            List.member t temporaryTowerTypes
-
-        have t =
-            List.member t existingTowerTypes
-    in
-    div []
-        ([ span [ style "margin-right" "5px" ] [ text (towerTypeString towerType ++ ":") ] ]
-            ++ List.map
-                (\combinationTowerType ->
-                    span
-                        [ style "margin-right" "5px"
-                        , style "color"
-                            (towerInfoColor
-                                (haveTemporarily combinationTowerType)
-                                (have combinationTowerType)
-                            )
-                        ]
-                        [ text (towerTypeString combinationTowerType) ]
-                )
-                combinations
-        )
-
-
-type alias TowerValues =
-    { range : Int
-    , damage : Int
-    , cooldown : Int
-    , targets : Int
-    }
-
-
-createTower : TowerType -> Int -> Tower
-createTower towerType cellIndex =
+createTower : TowerType -> Bool -> Int -> Tower
+createTower towerType temporary cellIndex =
     let
         values =
             case towerType of
@@ -266,39 +371,60 @@ createTower towerType cellIndex =
                     { range = 50, damage = 10, cooldown = 7, targets = 1 }
 
                 Base Red 2 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Red 3 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Red _ ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Green 1 ->
                     { range = 200, damage = 4, cooldown = 3, targets = 3 }
 
                 Base Green 2 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Green 3 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Green _ ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Blue 1 ->
-                    { range = 100, damage = 5, cooldown = 5, targets = 1 }
+                    { range = 10000, damage = 5, cooldown = 5, targets = 1 }
 
                 Base Blue 2 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Blue 3 ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Base Blue _ ->
-                    { range = 1, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
 
                 Combined Purple ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined White ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined Pink ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined Yellow ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined Orange ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined BigGreen ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined BigRed ->
+                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+
+                Combined BigBlue ->
                     { range = 100, damage = 100, cooldown = 1, targets = 10 }
     in
     { damage = values.damage
@@ -308,17 +434,47 @@ createTower towerType cellIndex =
     , cooldown = values.cooldown
     , currentCooldown = 0
     , targets = values.targets
-    , temporary = True
+    , temporary = temporary
     , towerType = towerType
     }
 
 
 viewTower : Bool -> Tower -> Html msg
 viewTower selected tower =
+    let
+        bar color index =
+            div
+                [ class "bar"
+                , style "bottom" (intToPxString ((index * 4) - 1))
+                , style "background-color" (colorToCssString color)
+                ]
+                []
+
+        bars =
+            case tower.towerType of
+                Base color int ->
+                    List.map (bar color) (List.range 1 int)
+
+                Combined _ ->
+                    []
+
+        blockHelper color =
+            div
+                [ class "block"
+                , style "background-color" color
+                ]
+                []
+
+        block =
+            case tower.towerType of
+                Combined _ ->
+                    blockHelper (towerTypeToCssString tower.towerType)
+
+                Base color int ->
+                    text ""
+    in
     div
         [ class "tower"
-        , style "width" (intToPxString towerSize)
-        , style "height" (intToPxString towerSize)
         , class
             (if selected then
                 "selected"
@@ -334,43 +490,28 @@ viewTower selected tower =
                 ""
             )
         ]
-        [ div [ class "tower-inner" ] (towerContent tower.towerType)
-        , if selected then
-            div
-                [ class "tower-range"
-                , style "width" (intToPxString (tower.range * 2))
-                , style "height" (intToPxString (tower.range * 2))
-                , style "top" (intToPxString (towerSize // 2 - ((tower.range * 2) // 2)))
-                , style "left" (intToPxString (towerSize // 2 - ((tower.range * 2) // 2)))
-                ]
-                []
+        ([]
+            ++ bars
+            ++ [ block ]
+            ++ (if selected then
+                    [ div
+                        [ class "tower-range"
+                        , style "width" (intToPxString (tower.range * 2))
+                        , style "height" (intToPxString (tower.range * 2))
+                        ]
+                        []
+                    , div
+                        [ class "selection"
+                        , style "width" (intToPxString (cellSize + 5))
+                        , style "height" (intToPxString (cellSize + 5))
+                        ]
+                        []
+                    ]
 
-          else
-            text ""
-        ]
-
-
-towerContent : TowerType -> List (Html msg)
-towerContent towerType =
-    let
-        bar color =
-            div [ class "bar", style "background" color ] []
-
-        box color =
-            div [ class "box", style "background" color ] []
-    in
-    case towerType of
-        Base color level ->
-            let
-                colorString =
-                    colorToString color
-            in
-            List.map (\_ -> bar colorString) (List.range 1 level)
-
-        Combined combinedTower ->
-            case combinedTower of
-                Purple ->
-                    [ box "purple" ]
+                else
+                    []
+               )
+        )
 
 
 availableUpgrades : List TowerType -> TowerType -> List TowerType

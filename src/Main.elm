@@ -4,17 +4,17 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
-import Constants exposing (boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, goalIndex, postIndices, startIndex, stepSize, stoneSize)
+import Constants exposing (blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
-import Html exposing (Html, br, button, div, text)
+import Html exposing (Html, br, button, div, span, text)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick)
 import List.Extra
-import Random exposing (Seed, initialSeed, step)
+import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
-import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, projectileColor, towerCombination, towerTypeString, viewTower, viewTowerInformation)
+import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
 
 
 type GameState
@@ -63,6 +63,7 @@ type alias Towers =
 type CellObject
     = CellTower TowerId
     | Stone
+    | Blocked
     | NoCellObject
 
 
@@ -87,6 +88,7 @@ type alias Enemy =
     , path : List Position
     , id : Int
     , hp : Int
+    , maxHp : Int
     , damage : Int
     , spawnTime : Int
     }
@@ -110,6 +112,8 @@ type Msg
     | RemoveStoneButtonClicked CellIndex
     | KeepTowerClicked TowerId
     | UpgradeTowerClicked TowerId TowerType
+    | OutsideBoardClicked
+    | GoalClicked
 
 
 init : () -> ( Model, Cmd Msg )
@@ -123,7 +127,7 @@ init _ =
       , towers = Dict.empty
       , projectiles = []
       , hp = 100
-      , level = 0
+      , level = 1
       , seed = initialSeed 1
       }
     , Cmd.none
@@ -140,14 +144,20 @@ initBoard =
             else if index == goalIndex then
                 Goal
 
+            else if List.member index blockedGrassIndices then
+                Grass Blocked
+
+            else if List.member index blockedPathIndices then
+                Path Blocked
+
             else if List.member index postIndices then
                 Post
 
-            else if
-                List.member index
-                    [ 3, 33, 63, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 93, 105, 116, 123, 135, 146, 153, 165, 176, 183, 195, 206, 213, 225, 236, 243, 255, 266, 273, 285, 296, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 345, 375, 405, 435, 465, 495, 525, 526, 527, 528, 529, 530, 531, 532, 533, 534, 535, 536 ]
-            then
+            else if List.member index pathIndicies then
                 Path NoCellObject
+
+            else if List.member index startingStones then
+                Grass Stone
 
             else
                 Grass NoCellObject
@@ -218,21 +228,13 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
                         { enemyId = enemy.id
                         , from = towerPosition
                         , ttl = 2
-                        , color = projectileColor tower.towerType
+                        , color = towerTypeToCssString tower.towerType
                         }
                     )
                     targets
-
-            _ =
-                Debug.log "targets" targets
-
-            _ =
-                Debug.log "afterDamage" afterDamage
-
-            _ =
-                Debug.log "newProjectiles" newProjectiles
         in
         ( towersAfterAddingCooldown
+          -- TODO check if this is the correct order to append the lists so towers don't switch targets
         , afterDamage ++ outOfTargetCount ++ outOfRange ++ notSpawned
         , projectiles ++ newProjectiles
         )
@@ -290,12 +292,12 @@ update msg model =
                                 ( model.towers, enemiesMoved, agedProjectiles )
                                 model.towers
 
-                        state =
+                        ( level, state ) =
                             if not (List.isEmpty model.enemies) && List.isEmpty enemies then
-                                Build buildsPerLevel
+                                ( model.level + 1, Build buildsPerLevel )
 
                             else
-                                model.state
+                                ( model.level, model.state )
                     in
                     { model
                         | enemies = enemies
@@ -303,19 +305,20 @@ update msg model =
                         , projectiles = projectiles
                         , hp = model.hp - enemyDamage
                         , state = state
+                        , level = level
                     }
 
                 BuildCellClicked cell ->
                     case model.state of
                         Level ->
-                            model
+                            { model | selected = NothingSelected }
 
                         Build towersLeft ->
                             if towersLeft > 0 then
                                 addTower cell model towersLeft
 
                             else
-                                model
+                                { model | selected = NothingSelected }
 
                 TowerClicked towerId ->
                     { model | selected = TowerSelected towerId }
@@ -344,6 +347,12 @@ update msg model =
 
                 UpgradeTowerClicked towerId towerType ->
                     upgradeTower model towerId towerType
+
+                OutsideBoardClicked ->
+                    { model | selected = NothingSelected }
+
+                GoalClicked ->
+                    { model | selected = NothingSelected }
     in
     ( newModel, Cmd.none )
 
@@ -364,7 +373,7 @@ upgradeTower model towerId upgradeTo =
                         |> List.filterMap identity
                         |> List.map Tuple.first
                         |> List.foldl (\id towers -> Dict.remove id towers) model.towers
-                        |> Dict.update towerId (Maybe.map (.cellIndex >> createTower upgradeTo))
+                        |> Dict.update towerId (Maybe.map (.cellIndex >> createTower upgradeTo True))
 
                 Nothing ->
                     model.towers
@@ -406,7 +415,6 @@ keepTower towerToKeepId model =
         , state = Level
         , enemies = spawnEnemies model
         , enemyIdCount = model.enemyIdCount + enemiesPerLevel
-        , level = model.level + 1
     }
 
 
@@ -489,15 +497,15 @@ availableSteps board ( x, y ) =
         walkable : Cell -> Maybe Cell
         walkable cell =
             case cell.cellType of
-                Path maybeTower ->
-                    if maybeTower == NoCellObject then
+                Path cellObject ->
+                    if cellObject == NoCellObject || cellObject == Blocked then
                         Just cell
 
                     else
                         Nothing
 
-                Grass maybeTower ->
-                    if maybeTower == NoCellObject then
+                Grass cellObject ->
+                    if cellObject == NoCellObject || cellObject == Blocked then
                         Just cell
 
                     else
@@ -561,6 +569,20 @@ indexToCellCenterPosition index =
     }
 
 
+indexToCellCenterBottomPosition : Int -> Position
+indexToCellCenterBottomPosition index =
+    let
+        x =
+            modBy boardWidth index
+
+        y =
+            index // boardWidth
+    in
+    { x = (x * cellSize) + (cellSize // 2)
+    , y = (y * cellSize) + cellSize
+    }
+
+
 findFullPath : Board -> List Position
 findFullPath board =
     let
@@ -591,10 +613,11 @@ findFullPath board =
 
 createEnemy : Board -> EnemyId -> Int -> Enemy
 createEnemy board enemyId spawnTime =
-    { position = indexToCellCenterPosition startIndex
+    { position = indexToCellCenterBottomPosition startIndex
     , path = findFullPath board
     , id = enemyId
     , hp = 500
+    , maxHp = 500
     , damage = 2
     , spawnTime = spawnTime
     }
@@ -607,7 +630,7 @@ addTower cell model towersLeft =
             getTowerType model.seed
 
         tower =
-            createTower towerType cell.index
+            createTower towerType True cell.index
 
         ( towerAdded, cellWithTower ) =
             addTowerToCell cell model.towerIdCount
@@ -640,20 +663,13 @@ addTower cell model towersLeft =
 
             else
                 model.state
-
-        selected =
-            if success then
-                TowerSelected model.towerIdCount
-
-            else
-                NothingSelected
     in
     { model
         | board = updatedBoard
         , towerIdCount = towerIdCount
         , towers = towers
         , state = state
-        , selected = selected
+        , selected = NothingSelected
         , seed = seed
     }
 
@@ -773,7 +789,7 @@ view : Model -> Html Msg
 view model =
     div
         [ class "main" ]
-        [ viewSide model
+        [ viewLeftSide model
         , div [ class "game" ]
             [ viewBoard model
             , div []
@@ -785,6 +801,7 @@ view model =
                     []
                 )
             ]
+        , viewRightSide model
         ]
 
 
@@ -800,7 +817,7 @@ viewSelectedTowerInfo model tower towerId =
                 []
     in
     div []
-        ([ text ("Selected tower totalDamage: " ++ String.fromInt tower.totalDamage)
+        ([ span [] [ text ("Tower " ++ towerTypeString tower.towerType) ]
          , if tower.temporary then
             if model.state == Build 0 then
                 button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
@@ -821,8 +838,8 @@ viewSelectedTowerInfo model tower towerId =
         )
 
 
-viewSide : Model -> Html Msg
-viewSide model =
+viewLeftSide : Model -> Html Msg
+viewLeftSide model =
     let
         stateString =
             case model.state of
@@ -830,48 +847,69 @@ viewSide model =
                     "level " ++ String.fromInt model.level
 
                 Build towersLeft ->
-                    "build " ++ String.fromInt towersLeft
+                    let
+                        towerString =
+                            if towersLeft == 0 then
+                                "Choose tower"
 
-        content =
-            case model.selected of
-                TowerSelected towerId ->
-                    case Dict.get towerId model.towers of
-                        Just tower ->
-                            viewSelectedTowerInfo model tower towerId
+                            else
+                                String.fromInt towersLeft ++ " towers left to build"
+                    in
+                    "Building for level " ++ String.fromInt model.level ++ " (" ++ towerString ++ ")"
 
-                        Nothing ->
-                            text "Nothing"
+        selection =
+            div [ class "selection-info" ]
+                [ case model.selected of
+                    TowerSelected towerId ->
+                        case Dict.get towerId model.towers of
+                            Just tower ->
+                                viewSelectedTowerInfo model tower towerId
 
-                EnemySelected enemyId ->
-                    case List.Extra.find (.id >> (==) enemyId) model.enemies of
-                        Just enemy ->
-                            text ("Selected enemy hp: " ++ String.fromInt enemy.hp)
+                            Nothing ->
+                                text "Nothing selected"
 
-                        Nothing ->
-                            text "Nothing"
+                    EnemySelected enemyId ->
+                        case List.Extra.find (.id >> (==) enemyId) model.enemies of
+                            Just enemy ->
+                                text
+                                    ("Enemy hp: ("
+                                        ++ String.fromInt enemy.hp
+                                        ++ "/"
+                                        ++ String.fromInt enemy.maxHp
+                                        ++ ")"
+                                    )
 
-                NothingSelected ->
-                    text "Nothing"
+                            Nothing ->
+                                text "Nothing selected"
 
-                StoneSelected int ->
-                    div []
-                        [ text ("Selected stone " ++ String.fromInt int)
-                        , button [ onClick (RemoveStoneButtonClicked int) ] [ text "Remove" ]
-                        ]
+                    NothingSelected ->
+                        text "Nothing selected"
 
+                    StoneSelected int ->
+                        div []
+                            [ text "Stone"
+                            , button [ onClick (RemoveStoneButtonClicked int) ] [ text "Remove" ]
+                            ]
+                ]
+    in
+    div [ class "left-side", onClick OutsideBoardClicked ]
+        [ span [] [ text stateString ]
+        , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
+        , selection
+        ]
+
+
+viewRightSide : Model -> Html Msg
+viewRightSide model =
+    let
         ( temporaryTowerTypes, existingTowerTypes ) =
             model.towers |> Dict.values |> List.partition .temporary
 
         towerTypes towers =
             List.map .towerType towers
     in
-    div [ class "side" ]
-        [ text ("State: " ++ stateString)
-        , br [] []
-        , text ("Hp: " ++ String.fromInt model.hp)
-        , br [] []
-        , content
-        , viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
+    div [ class "right-side", onClick OutsideBoardClicked ]
+        [ viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
         ]
 
 
@@ -892,7 +930,7 @@ viewBoard model =
     let
         cells =
             Array.toList
-                (Array.map (viewCellGroup model.selected model.towers) (groupCells model.board))
+                (Array.map (viewCellGroup model model.towers) (groupCells model.board))
 
         visibleEnemies =
             List.filter (.spawnTime >> (==) 0) model.enemies
@@ -980,29 +1018,32 @@ viewEnemy selected enemy =
         , style "height" (intToPxString enemySize)
         , style "left" (intToPxString (enemy.position.x - (enemySize // 2)))
         , style "top" (intToPxString (enemy.position.y - (enemySize // 2)))
-        , class
-            (if enemySelected then
-                "selected"
-
-             else
-                ""
-            )
         , onClick (EnemyClicked enemy)
         ]
-        [ div [ class "enemy-inner" ] []
-        ]
+        (if enemySelected then
+            [ div
+                [ class "selection"
+                , style "width" (intToPxString (cellSize - 5))
+                , style "height" (intToPxString (cellSize - 5))
+                ]
+                []
+            ]
 
-
-viewCellGroup : Selected -> Towers -> Array Cell -> Html Msg
-viewCellGroup selected towers group =
-    div [ class "cell-row" ]
-        (Array.toList
-            (Array.map (viewCell selected towers) group)
+         else
+            []
         )
 
 
-viewCell : Selected -> Towers -> Cell -> Html Msg
-viewCell selected towers cell =
+viewCellGroup : Model -> Towers -> Array Cell -> Html Msg
+viewCellGroup model towers group =
+    div [ class "cell-row" ]
+        (Array.toList
+            (Array.map (viewCell model towers) group)
+        )
+
+
+viewCell : Model -> Towers -> Cell -> Html Msg
+viewCell model towers cell =
     let
         ( cellClass, cellObject ) =
             case cell.cellType of
@@ -1022,7 +1063,7 @@ viewCell selected towers cell =
                     ( "cell-post", NoCellObject )
 
         towerSelected towerId =
-            case selected of
+            case model.selected of
                 TowerSelected selectedTowerId ->
                     towerId == selectedTowerId
 
@@ -1030,68 +1071,105 @@ viewCell selected towers cell =
                     False
 
         stoneSelected =
-            case selected of
+            case model.selected of
                 StoneSelected cellIndex ->
                     cellIndex == cell.index
 
                 _ ->
                     False
-    in
-    div
-        [ class "cell"
-        , class cellClass
-        , onClick
-            (case cellObject of
-                CellTower towerId ->
-                    TowerClicked towerId
 
-                Stone ->
-                    StoneClicked cell.index
+        content =
+            if cell.cellType == Goal then
+                [ div [ class "fort" ] [] ]
 
-                NoCellObject ->
-                    BuildCellClicked cell
-            )
-        , style "width" (intToPxString cellSize)
-        , style "height" (intToPxString cellSize)
-        ]
-        ([]
-            ++ (case cellObject of
-                    CellTower towerId ->
-                        let
-                            maybeTower =
-                                Dict.get towerId towers
-                        in
-                        case maybeTower of
-                            Just tower ->
-                                [ viewTower (towerSelected towerId) tower ]
+            else if cell.cellType == Start then
+                [ div [ class "cave" ] [] ]
 
-                            Nothing ->
+            else
+                []
+                    ++ (case cellObject of
+                            CellTower towerId ->
+                                let
+                                    maybeTower =
+                                        Dict.get towerId towers
+                                in
+                                case maybeTower of
+                                    Just tower ->
+                                        [ viewTower (towerSelected towerId) tower ]
+
+                                    Nothing ->
+                                        []
+
+                            Stone ->
+                                [ viewStone stoneSelected ]
+
+                            NoCellObject ->
                                 []
 
-                    Stone ->
-                        [ viewStone stoneSelected ]
+                            Blocked ->
+                                []
+                       )
 
-                    NoCellObject ->
-                        []
-               )
+        onClickAttribute =
+            case cellObject of
+                CellTower towerId ->
+                    [ onClick (TowerClicked towerId) ]
+
+                Stone ->
+                    [ onClick (StoneClicked cell.index) ]
+
+                NoCellObject ->
+                    [ onClick (BuildCellClicked cell) ]
+
+                Blocked ->
+                    []
+
+        noHoverEffect =
+            cellObject
+                /= NoCellObject
+                || cell.cellType
+                == Start
+                || cell.cellType
+                == Goal
+                || cell.cellType
+                == Post
+                || model.state
+                == Level
+    in
+    div
+        ([ class "cell"
+         , class cellClass
+         , style "width" (intToPxString cellSize)
+         , style "height" (intToPxString cellSize)
+         , class
+            (if noHoverEffect then
+                ""
+
+             else
+                "cell-hover"
+            )
+         ]
+            ++ onClickAttribute
         )
+        content
 
 
 viewStone : Bool -> Html msg
 viewStone selected =
     div
-        [ class "stone"
-        , style "width" (intToPxString stoneSize)
-        , style "height" (intToPxString stoneSize)
-        , class
-            (if selected then
-                "selected"
+        [ class "stone" ]
+        (if selected then
+            [ div
+                [ class "selection"
+                , style "width" (intToPxString cellSize)
+                , style "height" (intToPxString cellSize)
+                ]
+                []
+            ]
 
-             else
-                ""
-            )
-        ]
-        [ div [ class "stone-inner" ] [] ]
+         else
+            []
+        )
 
 
 main : Program () Model Msg
