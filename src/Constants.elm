@@ -14,7 +14,7 @@ cellSize =
 
 
 stepSize =
-    5
+    2
 
 
 enemySize =
@@ -131,8 +131,12 @@ startingStones =
 
 
 buildsPerLevel =
-    20
+    3
 
 
 enemiesPerLevel =
-    3
+    10
+
+
+fps =
+    30

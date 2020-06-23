@@ -4,22 +4,25 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
-import Constants exposing (blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
+import Constants exposing (blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
 import Html exposing (Html, br, button, div, span, text)
-import Html.Attributes exposing (class, style)
+import Html.Attributes exposing (class, disabled, style)
 import Html.Events exposing (onClick)
+import Levels exposing (getLevelInfo, viewLevels)
 import List.Extra
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
+import Time
 import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
 
 
 type GameState
     = Level
     | Build Int
+    | Paused
 
 
 type Selected
@@ -113,11 +116,13 @@ type Msg
     | KeepTowerClicked TowerId
     | UpgradeTowerClicked TowerId TowerType
     | OutsideBoardClicked
+    | PauseButtonClicked
+    | ResumeButtonClicked
     | GoalClicked
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
+init : Int -> ( Model, Cmd Msg )
+init seed =
     ( { board = initBoard
       , enemies = []
       , enemyIdCount = 0
@@ -128,7 +133,7 @@ init _ =
       , projectiles = []
       , hp = 100
       , level = 1
-      , seed = initialSeed 1
+      , seed = initialSeed seed
       }
     , Cmd.none
     )
@@ -227,7 +232,7 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
                     (\enemy ->
                         { enemyId = enemy.id
                         , from = towerPosition
-                        , ttl = 2
+                        , ttl = 6
                         , color = towerTypeToCssString tower.towerType
                         }
                     )
@@ -320,6 +325,9 @@ update msg model =
                             else
                                 { model | selected = NothingSelected }
 
+                        Paused ->
+                            model
+
                 TowerClicked towerId ->
                     { model | selected = TowerSelected towerId }
 
@@ -350,6 +358,12 @@ update msg model =
 
                 OutsideBoardClicked ->
                     { model | selected = NothingSelected }
+
+                PauseButtonClicked ->
+                    { model | state = Paused }
+
+                ResumeButtonClicked ->
+                    { model | state = Level }
 
                 GoalClicked ->
                     { model | selected = NothingSelected }
@@ -382,9 +396,15 @@ upgradeTower model towerId upgradeTo =
 
 
 spawnEnemies model =
+    let
+        levelInfo =
+            getLevelInfo model.level
+    in
     List.range 0 (enemiesPerLevel - 1)
-        |> List.map (\count -> ( count, count * 5 ))
-        |> List.map (\( count, cooldown ) -> createEnemy model.board (model.enemyIdCount + count) cooldown)
+        |> List.map
+            (\index ->
+                createEnemy model.board (model.enemyIdCount + index) (index * fps) levelInfo.hp
+            )
 
 
 keepTower : TowerId -> Model -> Model
@@ -430,7 +450,7 @@ moveEnemies enemies =
                 |> List.partition (.path >> List.isEmpty)
 
         enemiesLeft =
-            notSpawnedEnemies ++ otherEnemies
+            otherEnemies ++ notSpawnedEnemies
     in
     ( List.foldl (.damage >> (+)) 0 enemiesReachedGoal
     , List.map (\e -> { e | spawnTime = max 0 (e.spawnTime - 1) }) enemiesLeft
@@ -611,13 +631,13 @@ findFullPath board =
     List.tail fullPath |> Maybe.withDefault []
 
 
-createEnemy : Board -> EnemyId -> Int -> Enemy
-createEnemy board enemyId spawnTime =
+createEnemy : Board -> EnemyId -> Int -> Int -> Enemy
+createEnemy board enemyId spawnTime hp =
     { position = indexToCellCenterBottomPosition startIndex
     , path = findFullPath board
     , id = enemyId
-    , hp = 500
-    , maxHp = 500
+    , hp = hp
+    , maxHp = hp
     , damage = 2
     , spawnTime = spawnTime
     }
@@ -626,8 +646,11 @@ createEnemy board enemyId spawnTime =
 addTower : Cell -> Model -> Int -> Model
 addTower cell model towersLeft =
     let
+        levelInfo =
+            getLevelInfo model.level
+
         ( seed, towerType ) =
-            getTowerType model.seed
+            getTowerType model.seed levelInfo.buildChances
 
         tower =
             createTower towerType True cell.index
@@ -791,16 +814,7 @@ view model =
         [ class "main" ]
         [ viewLeftSide model
         , div [ class "game" ]
-            [ viewBoard model
-            , div []
-                (if model.state == Level then
-                    [ button [ onClick StepClicked ] [ text "Step" ]
-                    ]
-
-                 else
-                    []
-                )
-            ]
+            [ viewBoard model ]
         , viewRightSide model
         ]
 
@@ -857,6 +871,9 @@ viewLeftSide model =
                     in
                     "Building for level " ++ String.fromInt model.level ++ " (" ++ towerString ++ ")"
 
+                Paused ->
+                    "Paused"
+
         selection =
             div [ class "selection-info" ]
                 [ case model.selected of
@@ -891,11 +908,24 @@ viewLeftSide model =
                             , button [ onClick (RemoveStoneButtonClicked int) ] [ text "Remove" ]
                             ]
                 ]
+
+        pauseButton =
+            case model.state of
+                Level ->
+                    button [ onClick PauseButtonClicked ] [ text "Pause" ]
+
+                Build _ ->
+                    button [ disabled True ] [ text "Pause" ]
+
+                Paused ->
+                    button [ onClick ResumeButtonClicked ] [ text "Resume" ]
     in
     div [ class "left-side", onClick OutsideBoardClicked ]
         [ span [] [ text stateString ]
+        , span [] [ pauseButton ]
         , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
         , selection
+        , viewLevels
         ]
 
 
@@ -1011,6 +1041,9 @@ viewEnemy selected enemy =
 
                 _ ->
                     False
+
+        hpPercentage =
+            (toFloat enemy.hp / toFloat enemy.maxHp) * 100
     in
     div
         [ class "enemy"
@@ -1020,17 +1053,26 @@ viewEnemy selected enemy =
         , style "top" (intToPxString (enemy.position.y - (enemySize // 2)))
         , onClick (EnemyClicked enemy)
         ]
-        (if enemySelected then
+        ([ div [ class "hp-bar" ]
             [ div
-                [ class "selection"
-                , style "width" (intToPxString (cellSize - 5))
-                , style "height" (intToPxString (cellSize - 5))
+                [ class "hp-bar-inner"
+                , style "width" (String.fromFloat hpPercentage ++ "%")
                 ]
                 []
             ]
+         ]
+            ++ (if enemySelected then
+                    [ div
+                        [ class "selection"
+                        , style "width" (intToPxString (cellSize - 5))
+                        , style "height" (intToPxString (cellSize - 5))
+                        ]
+                        []
+                    ]
 
-         else
-            []
+                else
+                    []
+               )
         )
 
 
@@ -1172,11 +1214,20 @@ viewStone selected =
         )
 
 
-main : Program () Model Msg
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    if model.state == Level then
+        Time.every (1000 / fps) (always StepClicked)
+
+    else
+        Sub.none
+
+
+main : Program Int Model Msg
 main =
     Browser.element
         { view = view
         , init = init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         }

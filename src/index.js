@@ -4,6 +4,7 @@ import * as serviceWorker from './serviceWorker';
 
 Elm.Main.init({
   node: document.getElementById('root'),
+  flags: Math.floor(Math.random() * 10000000),
 });
 
 // If you want your app to work offline and load faster, you can change

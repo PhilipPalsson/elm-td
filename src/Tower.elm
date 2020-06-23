@@ -1,8 +1,8 @@
 module Tower exposing (..)
 
-import Constants exposing (cellSize)
+import Constants exposing (cellSize, fps)
 import Helper exposing (intToPxString)
-import Html exposing (Html, div, h3, span, table, td, text, th, tr)
+import Html exposing (Html, div, h3, table, td, text, th, tr)
 import Html.Attributes exposing (class, style)
 import List.Extra
 import Random exposing (Seed)
@@ -36,7 +36,7 @@ colors =
 
 
 maxTowerLevel =
-    4
+    3
 
 
 type CombinedTower
@@ -45,6 +45,7 @@ type CombinedTower
     | Pink
     | Yellow
     | Orange
+    | Turquoise
     | BigGreen
     | BigRed
     | BigBlue
@@ -63,13 +64,14 @@ basicTowers =
 combinedTowers : List TowerType
 combinedTowers =
     [ Combined Purple
-    , Combined White
-    , Combined Pink
     , Combined Yellow
     , Combined Orange
+    , Combined Turquoise
     , Combined BigGreen
     , Combined BigRed
     , Combined BigBlue
+    , Combined White
+    , Combined Pink
     ]
 
 
@@ -120,6 +122,9 @@ towerTypeToCssString towerType =
         Combined Orange ->
             "orange"
 
+        Combined Turquoise ->
+            "turquoise"
+
         Combined BigGreen ->
             "green"
 
@@ -140,13 +145,9 @@ towerTypeString towerType =
             combinedTowerTypeString combinedTower
 
 
-getTowerType : Seed -> ( Seed, TowerType )
-getTowerType seed =
+getTowerType : Seed -> List Int -> ( Seed, TowerType )
+getTowerType seed chances =
     let
-        chances =
-            [ 25, 25, 25, 25 ]
-
-        --[ 60, 20, 12, 8 ]
         splitInFour value =
             List.repeat (List.length colors) (value // List.length colors)
 
@@ -204,6 +205,9 @@ combinedTowerTypeString combinedTowerType =
         Orange ->
             "Orange"
 
+        Turquoise ->
+            "Turquoise"
+
         BigGreen ->
             "Big Green"
 
@@ -220,9 +224,6 @@ towerCombination towerType =
         Combined Purple ->
             [ Base Blue 1, Base Red 1, Base Red 2 ]
 
-        Combined White ->
-            [ Base Blue 1, Base Red 1, Base Green 1 ]
-
         Combined Pink ->
             [ Combined White, Base Red 1, Combined Purple ]
 
@@ -232,6 +233,9 @@ towerCombination towerType =
         Combined Orange ->
             [ Combined Yellow, Base Red 1, Base Red 2 ]
 
+        Combined Turquoise ->
+            [ Base Blue 2, Base Green 2, Base Blue 3 ]
+
         Combined BigGreen ->
             [ Base Green 1, Base Green 2, Base Green 3 ]
 
@@ -240,6 +244,9 @@ towerCombination towerType =
 
         Combined BigBlue ->
             [ Base Blue 1, Base Blue 2, Base Blue 3 ]
+
+        Combined White ->
+            [ Base Blue 3, Base Red 3, Base Green 3 ]
 
         Base _ _ ->
             []
@@ -270,6 +277,15 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
             let
                 tower =
                     createTower towerType False 0
+
+                hitsPerSecond =
+                    toFloat fps / toFloat tower.cooldown
+
+                rate =
+                    round (hitsPerSecond * 100)
+
+                maxDps =
+                    hitsPerSecond * toFloat tower.damage * toFloat tower.targets
             in
             div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
                 [ div [ class "tower-image" ]
@@ -280,15 +296,15 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                         [ th [] [ text "Damage" ]
                         , th [] [ text "Targets" ]
                         , th [] [ text "Range" ]
-                        , th [] [ text "Cooldown" ]
+                        , th [] [ text "Rate" ]
                         , th [] [ text "Max dps" ]
                         ]
                     , tr []
                         [ td [] [ text (String.fromInt tower.damage) ]
                         , td [] [ text (String.fromInt tower.targets) ]
                         , td [] [ text (String.fromInt tower.range) ]
-                        , td [] [ text (String.fromInt tower.cooldown) ]
-                        , td [] [ text (String.fromInt (round (toFloat tower.damage * (1 / toFloat tower.cooldown)))) ]
+                        , td [] [ text (String.fromInt rate) ]
+                        , td [] [ text (String.fromInt (round maxDps)) ]
                         ]
                     ]
                 ]
@@ -368,64 +384,67 @@ createTower towerType temporary cellIndex =
         values =
             case towerType of
                 Base Red 1 ->
-                    { range = 50, damage = 10, cooldown = 7, targets = 1 }
+                    { range = 50, damage = 10, cooldown = fps, targets = 1 }
 
                 Base Red 2 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Red 3 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Red _ ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 1 ->
-                    { range = 200, damage = 4, cooldown = 3, targets = 3 }
+                    { range = 200, damage = 4, cooldown = fps, targets = 3 }
 
                 Base Green 2 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 3 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Green _ ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 1 ->
-                    { range = 10000, damage = 5, cooldown = 5, targets = 1 }
+                    { range = 10000, damage = 5, cooldown = fps, targets = 1 }
 
                 Base Blue 2 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 3 ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue _ ->
-                    { range = 100, damage = 1, cooldown = 1, targets = 1 }
+                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
 
                 Combined Purple ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined White ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined Pink ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined Yellow ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined Orange ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+
+                Combined Turquoise ->
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined BigGreen ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined BigRed ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
 
                 Combined BigBlue ->
-                    { range = 100, damage = 100, cooldown = 1, targets = 10 }
+                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
     in
     { damage = values.damage
     , totalDamage = 0
