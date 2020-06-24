@@ -8,104 +8,27 @@ import Constants exposing (blockedGrassIndices, blockedPathIndices, boardHeight,
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
-import Html exposing (Html, br, button, div, span, text)
+import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes exposing (class, disabled, style)
 import Html.Events exposing (onClick)
-import Levels exposing (getLevelInfo, viewLevels)
+import Json.Decode
+import Levels exposing (LevelInfo, getLevelInfo, viewLevels)
 import List.Extra
+import Ports exposing (saveState)
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
 import Time
 import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
-
-
-type GameState
-    = Level
-    | Build Int
-    | Paused
-
-
-type Selected
-    = TowerSelected TowerId
-    | EnemySelected EnemyId
-    | StoneSelected CellIndex
-    | NothingSelected
-
-
-type alias Projectile =
-    { enemyId : EnemyId, from : Position, ttl : Int, color : String }
-
-
-type alias Projectiles =
-    List Projectile
-
-
-type alias Model =
-    { board : Board
-    , enemies : List Enemy
-    , enemyIdCount : EnemyId
-    , state : GameState
-    , selected : Selected
-    , towerIdCount : TowerId
-    , towers : Towers
-    , projectiles : Projectiles
-    , hp : Int
-    , level : Int
-    , seed : Seed
-    }
-
-
-type alias EnemyId =
-    Int
-
-
-type alias Towers =
-    Dict TowerId Tower
-
-
-type CellObject
-    = CellTower TowerId
-    | Stone
-    | Blocked
-    | NoCellObject
-
-
-type CellType
-    = Path CellObject
-    | Grass CellObject
-    | Start
-    | Goal
-    | Post
-
-
-type alias Cell =
-    { cellType : CellType, index : CellIndex }
-
-
-type alias Position =
-    { x : Int, y : Int }
-
-
-type alias Enemy =
-    { position : Position
-    , path : List Position
-    , id : Int
-    , hp : Int
-    , maxHp : Int
-    , damage : Int
-    , spawnTime : Int
-    }
-
-
-type alias Board =
-    Array Cell
-
-
-type alias CellIndex =
-    Int
+import Types exposing (Board, Cell, CellIndex, CellObject(..), CellType(..), Enemy, EnemyId, GameModel, GameState(..), Position, Projectile, Projectiles, Selected(..), Towers, gameModelDecoder, gameModelEncoder)
 
 
 type Msg
+    = StartNewGameClicked
+    | LoadSavedGameClicked
+    | GameMsg GameMsg
+
+
+type GameMsg
     = StepClicked
     | BuildCellClicked Cell
     | TowerClicked TowerId
@@ -121,19 +44,55 @@ type Msg
     | GoalClicked
 
 
-init : Int -> ( Model, Cmd Msg )
-init seed =
-    ( { board = initBoard
-      , enemies = []
-      , enemyIdCount = 0
-      , state = Build buildsPerLevel
-      , selected = NothingSelected
-      , towerIdCount = 0
-      , towers = Dict.empty
-      , projectiles = []
-      , hp = 100
-      , level = 1
-      , seed = initialSeed seed
+type alias Model =
+    { gameModel : GameModel
+    , savedGameModel : Maybe GameModel
+    , savedTimestamp : Maybe String
+    }
+
+
+init : Json.Decode.Value -> ( Model, Cmd Msg )
+init flags =
+    let
+        default =
+            { board = initBoard
+            , enemies = []
+            , enemyIdCount = 0
+            , state = Build buildsPerLevel
+            , selected = NothingSelected
+            , towerIdCount = 0
+            , towers = Dict.empty
+            , projectiles = []
+            , hp = 100
+            , level = 1
+            , seed = initialSeed 1
+            }
+
+        savedGameModel : Maybe GameModel
+        savedGameModel =
+            Json.Decode.decodeValue
+                (Json.Decode.field "gameState" (gameModelDecoder 1))
+                flags
+                |> Result.toMaybe
+                |> Maybe.andThen
+                    (\m ->
+                        if m.state == GameOver then
+                            Nothing
+
+                        else
+                            Just m
+                    )
+
+        savedTimestamp : Maybe String
+        savedTimestamp =
+            Json.Decode.decodeValue
+                (Json.Decode.field "timestamp" Json.Decode.string)
+                flags
+                |> Result.toMaybe
+    in
+    ( { gameModel = default
+      , savedGameModel = savedGameModel
+      , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
       }
     , Cmd.none
     )
@@ -274,6 +233,29 @@ removeCellObject cell =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    case msg of
+        GameMsg gameMsg ->
+            let
+                ( gameModel, gameCmd ) =
+                    updateGame gameMsg model.gameModel
+            in
+            ( { model | gameModel = gameModel }, Cmd.map GameMsg gameCmd )
+
+        StartNewGameClicked ->
+            ( { model | savedGameModel = Nothing }, Cmd.none )
+
+        LoadSavedGameClicked ->
+            ( { model
+                | gameModel = Maybe.withDefault model.gameModel model.savedGameModel
+                , savedGameModel = Nothing
+                , savedTimestamp = Nothing
+              }
+            , Cmd.none
+            )
+
+
+updateGame : GameMsg -> GameModel -> ( GameModel, Cmd GameMsg )
+updateGame msg model =
     let
         newModel =
             case msg of
@@ -297,8 +279,14 @@ update msg model =
                                 ( model.towers, enemiesMoved, agedProjectiles )
                                 model.towers
 
+                        hp =
+                            model.hp - enemyDamage
+
                         ( level, state ) =
-                            if not (List.isEmpty model.enemies) && List.isEmpty enemies then
+                            if hp <= 0 then
+                                ( model.level, GameOver )
+
+                            else if not (List.isEmpty model.enemies) && List.isEmpty enemies then
                                 ( model.level + 1, Build buildsPerLevel )
 
                             else
@@ -308,7 +296,7 @@ update msg model =
                         | enemies = enemies
                         , towers = towers
                         , projectiles = projectiles
-                        , hp = model.hp - enemyDamage
+                        , hp = hp
                         , state = state
                         , level = level
                     }
@@ -326,7 +314,10 @@ update msg model =
                                 { model | selected = NothingSelected }
 
                         Paused ->
-                            model
+                            { model | selected = NothingSelected }
+
+                        GameOver ->
+                            { model | selected = NothingSelected }
 
                 TowerClicked towerId ->
                     { model | selected = TowerSelected towerId }
@@ -368,10 +359,16 @@ update msg model =
                 GoalClicked ->
                     { model | selected = NothingSelected }
     in
-    ( newModel, Cmd.none )
+    ( newModel
+    , if model.state /= newModel.state then
+        saveState (gameModelEncoder newModel)
+
+      else
+        Cmd.none
+    )
 
 
-upgradeTower : Model -> TowerId -> TowerType -> Model
+upgradeTower : GameModel -> TowerId -> TowerType -> GameModel
 upgradeTower model towerId upgradeTo =
     let
         updatedTowers =
@@ -403,11 +400,11 @@ spawnEnemies model =
     List.range 0 (enemiesPerLevel - 1)
         |> List.map
             (\index ->
-                createEnemy model.board (model.enemyIdCount + index) (index * fps) levelInfo.hp
+                createEnemy model.board (model.enemyIdCount + index) (index * fps) levelInfo
             )
 
 
-keepTower : TowerId -> Model -> Model
+keepTower : TowerId -> GameModel -> GameModel
 keepTower towerToKeepId model =
     let
         afterRemovingTemporaryFlag =
@@ -631,19 +628,19 @@ findFullPath board =
     List.tail fullPath |> Maybe.withDefault []
 
 
-createEnemy : Board -> EnemyId -> Int -> Int -> Enemy
-createEnemy board enemyId spawnTime hp =
+createEnemy : Board -> EnemyId -> Int -> LevelInfo -> Enemy
+createEnemy board enemyId spawnTime levelInfo =
     { position = indexToCellCenterBottomPosition startIndex
     , path = findFullPath board
     , id = enemyId
-    , hp = hp
-    , maxHp = hp
-    , damage = 2
+    , hp = levelInfo.hp
+    , maxHp = levelInfo.hp
+    , damage = levelInfo.damage
     , spawnTime = spawnTime
     }
 
 
-addTower : Cell -> Model -> Int -> Model
+addTower : Cell -> GameModel -> Int -> GameModel
 addTower cell model towersLeft =
     let
         levelInfo =
@@ -810,16 +807,43 @@ moveEnemy ({ position } as enemy) =
 
 view : Model -> Html Msg
 view model =
+    case model.savedGameModel of
+        Just _ ->
+            div [ class "pre-game" ]
+                [ text ("Found save state from " ++ Maybe.withDefault "" model.savedTimestamp)
+                , button [ onClick LoadSavedGameClicked ] [ text "Load save state" ]
+                , button [ onClick StartNewGameClicked ] [ text "Start new game" ]
+                ]
+
+        Nothing ->
+            Html.map GameMsg (viewGame model.gameModel)
+
+
+viewGame : GameModel -> Html GameMsg
+viewGame gameModel =
     div
         [ class "main" ]
-        [ viewLeftSide model
-        , div [ class "game" ]
-            [ viewBoard model ]
-        , viewRightSide model
+        [ viewLeftSide gameModel
+        , div [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
+            [ viewBoard gameModel ]
+        , viewRightSide gameModel
+        , viewGameOverOverlay gameModel
         ]
 
 
-viewSelectedTowerInfo : Model -> Tower -> TowerId -> Html Msg
+viewGameOverOverlay : GameModel -> Html GameMsg
+viewGameOverOverlay model =
+    if model.state == GameOver then
+        div [ class "game-over-overlay" ]
+            [ h1 [] [ text "Game over!" ]
+            , text ("You reached level " ++ String.fromInt model.level)
+            ]
+
+    else
+        div [] []
+
+
+viewSelectedTowerInfo : GameModel -> Tower -> TowerId -> Html GameMsg
 viewSelectedTowerInfo model tower towerId =
     let
         upgrades : List TowerType
@@ -852,13 +876,13 @@ viewSelectedTowerInfo model tower towerId =
         )
 
 
-viewLeftSide : Model -> Html Msg
+viewLeftSide : GameModel -> Html GameMsg
 viewLeftSide model =
     let
         stateString =
             case model.state of
                 Level ->
-                    "level " ++ String.fromInt model.level
+                    "Level " ++ String.fromInt model.level
 
                 Build towersLeft ->
                     let
@@ -873,6 +897,9 @@ viewLeftSide model =
 
                 Paused ->
                     "Paused"
+
+                GameOver ->
+                    "Game over"
 
         selection =
             div [ class "selection-info" ]
@@ -919,6 +946,9 @@ viewLeftSide model =
 
                 Paused ->
                     button [ onClick ResumeButtonClicked ] [ text "Resume" ]
+
+                GameOver ->
+                    button [ disabled True ] [ text "Pause" ]
     in
     div [ class "left-side", onClick OutsideBoardClicked ]
         [ span [] [ text stateString ]
@@ -926,10 +956,11 @@ viewLeftSide model =
         , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
         , selection
         , viewLevels
+        , button [] [ text "Restart" ]
         ]
 
 
-viewRightSide : Model -> Html Msg
+viewRightSide : GameModel -> Html GameMsg
 viewRightSide model =
     let
         ( temporaryTowerTypes, existingTowerTypes ) =
@@ -955,7 +986,7 @@ groupCells array =
         (Array.initialize boardHeight identity)
 
 
-viewBoard : Model -> Html Msg
+viewBoard : GameModel -> Html GameMsg
 viewBoard model =
     let
         cells =
@@ -984,7 +1015,7 @@ distance pos1 pos2 =
     sqrt ((dx ^ 2) + (dy ^ 2))
 
 
-viewProjectile : List Enemy -> Projectile -> Html Msg
+viewProjectile : List Enemy -> Projectile -> Html GameMsg
 viewProjectile enemies projectile =
     let
         maybeEnemy =
@@ -1031,7 +1062,7 @@ viewProjectile enemies projectile =
             div [] []
 
 
-viewEnemy : Selected -> Enemy -> Html Msg
+viewEnemy : Selected -> Enemy -> Html GameMsg
 viewEnemy selected enemy =
     let
         enemySelected =
@@ -1076,7 +1107,7 @@ viewEnemy selected enemy =
         )
 
 
-viewCellGroup : Model -> Towers -> Array Cell -> Html Msg
+viewCellGroup : GameModel -> Towers -> Array Cell -> Html GameMsg
 viewCellGroup model towers group =
     div [ class "cell-row" ]
         (Array.toList
@@ -1084,7 +1115,7 @@ viewCellGroup model towers group =
         )
 
 
-viewCell : Model -> Towers -> Cell -> Html Msg
+viewCell : GameModel -> Towers -> Cell -> Html GameMsg
 viewCell model towers cell =
     let
         ( cellClass, cellObject ) =
@@ -1216,14 +1247,14 @@ viewStone selected =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.state == Level then
-        Time.every (1000 / fps) (always StepClicked)
+    if model.gameModel.state == Level then
+        Time.every (1000 / fps) (always (GameMsg StepClicked))
 
     else
         Sub.none
 
 
-main : Program Int Model Msg
+main : Program Json.Decode.Value Model Msg
 main =
     Browser.element
         { view = view

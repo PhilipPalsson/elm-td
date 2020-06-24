@@ -19,11 +19,24 @@
 
 body {
     margin: 0;
-    background-color: #100e134a;
+    background-color: #d0d0d0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 h3 {
     margin-top: 0;
+}
+
+.pre-game {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    margin-top: 50px;
+}
+
+.pre-game button {
+    margin-top: 20px;
 }
 
 .main {
@@ -40,6 +53,7 @@ h3 {
     flex: 1 0 0;
     height: 100vh;
     overflow: auto;
+    min-width: 345px;
 }
 
 .left-side {
@@ -49,6 +63,7 @@ h3 {
     flex: 1 0 0;
     height: 100vh;
     overflow: auto;
+    min-width: 345px;
 }
 
 .left-side > * {
@@ -152,12 +167,14 @@ h3 {
 .bar {
     height: 3px;
     width: 10px;
+    left: 9px;
     position: absolute;
 }
 
 .block {
     bottom: 5px;
     height: 10px;
+    left: 9px;
     width: 10px;
     position: absolute;
 }
@@ -202,18 +219,15 @@ h3 {
 .tower-block {
     display: flex;
     border: 2px solid #827f7f;
-    font-size: 14px;
+    font-size: 13px;
     width: 100%;
     margin-bottom: 8px;
-    align-items: center;
-}
-
-.tower-block-combined {
     flex-direction: column;
 }
 
 .tower-block-inner {
     display: flex;
+    align-items: center;
 }
 
 .tower-image {
@@ -226,6 +240,10 @@ h3 {
     text-align: center;
 }
 
+.tower-info th {
+    padding: 0 4px;
+}
+
 .have-temporarily {
     border: 2px solid #ffb100;
 }
@@ -236,6 +254,7 @@ h3 {
 
 .tower-images {
     display: flex;
+    justify-content: center;
 }
 
 .tower-image.have {
@@ -260,4 +279,29 @@ h3 {
 .hp-bar-inner {
     height: 100%;
     background-color: green;
+}
+
+.levels-table {
+    width: 100%;
+}
+
+.levels-table th, .levels-table td {
+    text-align: left;
+}
+
+.game-over-overlay {
+    position: absolute;
+    width: 100vw;
+    height: 100vh;
+    background-color: #000000bf;
+    color: white;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    font-size: 40px;
+    padding-top: 25px;
+}
+
+.game-over-overlay h1 {
+    font-size: 70px;
 }

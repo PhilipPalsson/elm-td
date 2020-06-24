@@ -145,6 +145,67 @@ towerTypeString towerType =
             combinedTowerTypeString combinedTower
 
 
+towerTypeFromString : String -> TowerType
+towerTypeFromString string =
+    case string of
+        "Red 1" ->
+            Base Red 1
+
+        "Red 2" ->
+            Base Red 2
+
+        "Red 3" ->
+            Base Red 3
+
+        "Green 1" ->
+            Base Green 1
+
+        "Green 2" ->
+            Base Green 2
+
+        "Green 3" ->
+            Base Green 3
+
+        "Blue 1" ->
+            Base Blue 1
+
+        "Blue 2" ->
+            Base Blue 2
+
+        "Blue 3" ->
+            Base Blue 3
+
+        "Purple" ->
+            Combined Purple
+
+        "White" ->
+            Combined White
+
+        "Pink" ->
+            Combined Pink
+
+        "Yellow" ->
+            Combined Yellow
+
+        "Orange" ->
+            Combined Orange
+
+        "Turquoise" ->
+            Combined Turquoise
+
+        "BigGreen" ->
+            Combined BigGreen
+
+        "BigRed" ->
+            Combined BigRed
+
+        "BigBlue" ->
+            Combined BigBlue
+
+        _ ->
+            Base Green 1
+
+
 getTowerType : Seed -> List Int -> ( Seed, TowerType )
 getTowerType seed chances =
     let
@@ -272,8 +333,8 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
         have towerType =
             List.member towerType existingTowerTypes
 
-        baseTower : TowerType -> Html msg
-        baseTower towerType =
+        towerBlock : TowerType -> Html msg
+        towerBlock towerType =
             let
                 tower =
                     createTower towerType False 0
@@ -286,39 +347,11 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
 
                 maxDps =
                     hitsPerSecond * toFloat tower.damage * toFloat tower.targets
-            in
-            div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
-                [ div [ class "tower-image" ]
-                    [ viewTower False tower
-                    ]
-                , table [ class "tower-info" ]
-                    [ tr []
-                        [ th [] [ text "Damage" ]
-                        , th [] [ text "Targets" ]
-                        , th [] [ text "Range" ]
-                        , th [] [ text "Rate" ]
-                        , th [] [ text "Max dps" ]
-                        ]
-                    , tr []
-                        [ td [] [ text (String.fromInt tower.damage) ]
-                        , td [] [ text (String.fromInt tower.targets) ]
-                        , td [] [ text (String.fromInt tower.range) ]
-                        , td [] [ text (String.fromInt rate) ]
-                        , td [] [ text (String.fromInt (round maxDps)) ]
-                        ]
-                    ]
-                ]
-
-        combinedTower : TowerType -> Html msg
-        combinedTower towerType =
-            let
-                tower =
-                    createTower towerType False 0
 
                 combinations =
                     towerCombination towerType
             in
-            div [ class "tower-block tower-block-combined", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
+            div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
                 [ div [ class "tower-block-inner" ]
                     [ div [ class "tower-image" ]
                         [ viewTower False tower
@@ -328,15 +361,15 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                             [ th [] [ text "Damage" ]
                             , th [] [ text "Targets" ]
                             , th [] [ text "Range" ]
-                            , th [] [ text "Cooldown" ]
+                            , th [] [ text "Rate" ]
                             , th [] [ text "Max dps" ]
                             ]
                         , tr []
                             [ td [] [ text (String.fromInt tower.damage) ]
                             , td [] [ text (String.fromInt tower.targets) ]
                             , td [] [ text (String.fromInt tower.range) ]
-                            , td [] [ text (String.fromInt tower.cooldown) ]
-                            , td [] [ text (String.fromInt (round (toFloat tower.damage * (1 / toFloat tower.cooldown)))) ]
+                            , td [] [ text (String.fromInt rate) ]
+                            , td [] [ text (String.fromInt (round maxDps)) ]
                             ]
                         ]
                     ]
@@ -358,11 +391,11 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
         [ h3 []
             [ text "Base towers"
             ]
-        , div [ class "tower-list" ] (List.map baseTower basicTowers)
+        , div [ class "tower-list" ] (List.map towerBlock basicTowers)
         , h3 []
             [ text "Combined towers"
             ]
-        , div [ class "tower-list" ] (List.map combinedTower combinedTowers)
+        , div [ class "tower-list" ] (List.map towerBlock combinedTowers)
         ]
 
 
