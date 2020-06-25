@@ -14,11 +14,11 @@ cellSize =
 
 
 stepSize =
-    2
+    1
 
 
-enemySize =
-    28
+baseEnemySize =
+    24
 
 
 startIndex =
@@ -134,9 +134,5 @@ buildsPerLevel =
     3
 
 
-enemiesPerLevel =
-    10
-
-
 fps =
-    30
+    60

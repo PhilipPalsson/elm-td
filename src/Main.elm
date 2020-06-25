@@ -4,12 +4,12 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
-import Constants exposing (blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, enemiesPerLevel, enemySize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
+import Constants exposing (baseEnemySize, blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
 import Html exposing (Html, button, div, h1, span, text)
-import Html.Attributes exposing (class, disabled, style)
+import Html.Attributes exposing (class, classList, disabled, style)
 import Html.Events exposing (onClick)
 import Json.Decode
 import Levels exposing (LevelInfo, getLevelInfo, viewLevels)
@@ -140,7 +140,15 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
     if tower.currentCooldown == 0 then
         let
             dealDamage enemy =
-                { enemy | hp = enemy.hp - tower.damage }
+                let
+                    damage =
+                        if enemy.flying then
+                            round (toFloat tower.damage * tower.flyingDamage)
+
+                        else
+                            tower.damage
+                in
+                { enemy | hp = enemy.hp - damage }
 
             towerPosition =
                 indexToCellCenterPosition tower.cellIndex
@@ -191,7 +199,7 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
                     (\enemy ->
                         { enemyId = enemy.id
                         , from = towerPosition
-                        , ttl = 6
+                        , ttl = fps // 5
                         , color = towerTypeToCssString tower.towerType
                         }
                     )
@@ -397,7 +405,7 @@ spawnEnemies model =
         levelInfo =
             getLevelInfo model.level
     in
-    List.range 0 (enemiesPerLevel - 1)
+    List.range 0 (levelInfo.enemyCount - 1)
         |> List.map
             (\index ->
                 createEnemy model.board (model.enemyIdCount + index) (index * fps) levelInfo
@@ -425,13 +433,16 @@ keepTower towerToKeepId model =
                 |> Dict.values
                 |> List.map .cellIndex
                 |> List.foldl addStoneToCell model.board
+
+        newEnemies =
+            spawnEnemies model
     in
     { model
         | towers = toKeep
         , board = boardWithStones
         , state = Level
-        , enemies = spawnEnemies model
-        , enemyIdCount = model.enemyIdCount + enemiesPerLevel
+        , enemies = newEnemies
+        , enemyIdCount = model.enemyIdCount + List.length newEnemies
     }
 
 
@@ -454,8 +465,8 @@ moveEnemies enemies =
     )
 
 
-availableSteps : Board -> AStar.Position -> Set AStar.Position
-availableSteps board ( x, y ) =
+availableSteps : Board -> Bool -> AStar.Position -> Set AStar.Position
+availableSteps board flying ( x, y ) =
     let
         index =
             y * boardWidth + x
@@ -484,28 +495,28 @@ availableSteps board ( x, y ) =
             getCell (index - 1)
 
         upLeft =
-            if up /= Nothing || left /= Nothing then
+            if up /= Nothing || left /= Nothing || flying then
                 getCell (index - boardWidth - 1)
 
             else
                 Nothing
 
         upRight =
-            if up /= Nothing || right /= Nothing then
+            if up /= Nothing || right /= Nothing || flying then
                 getCell (index - boardWidth + 1)
 
             else
                 Nothing
 
         downRight =
-            if down /= Nothing || right /= Nothing then
+            if down /= Nothing || right /= Nothing || flying then
                 getCell (index + boardWidth + 1)
 
             else
                 Nothing
 
         downLeft =
-            if down /= Nothing || left /= Nothing then
+            if down /= Nothing || left /= Nothing || flying then
                 getCell (index + boardWidth - 1)
 
             else
@@ -513,29 +524,33 @@ availableSteps board ( x, y ) =
 
         walkable : Cell -> Maybe Cell
         walkable cell =
-            case cell.cellType of
-                Path cellObject ->
-                    if cellObject == NoCellObject || cellObject == Blocked then
+            if flying then
+                Just cell
+
+            else
+                case cell.cellType of
+                    Path cellObject ->
+                        if cellObject == NoCellObject || cellObject == Blocked then
+                            Just cell
+
+                        else
+                            Nothing
+
+                    Grass cellObject ->
+                        if cellObject == NoCellObject || cellObject == Blocked then
+                            Just cell
+
+                        else
+                            Nothing
+
+                    Start ->
                         Just cell
 
-                    else
-                        Nothing
-
-                Grass cellObject ->
-                    if cellObject == NoCellObject || cellObject == Blocked then
+                    Goal ->
                         Just cell
 
-                    else
-                        Nothing
-
-                Start ->
-                    Just cell
-
-                Goal ->
-                    Just cell
-
-                Post ->
-                    Just cell
+                    Post ->
+                        Just cell
 
         indexToCellPosition : Int -> ( Int, Int )
         indexToCellPosition i =
@@ -547,8 +562,8 @@ availableSteps board ( x, y ) =
         |> Set.fromList
 
 
-findPath : Array Cell -> Position -> Position -> List Position
-findPath cells from to =
+findPath : Array Cell -> Bool -> Position -> Position -> List Position
+findPath cells flying from to =
     let
         positionToCellPosition : Position -> ( Int, Int )
         positionToCellPosition position =
@@ -563,7 +578,7 @@ findPath cells from to =
         path =
             AStar.findPath
                 AStar.straightLineCost
-                (availableSteps cells)
+                (availableSteps cells flying)
                 (positionToCellPosition from)
                 (positionToCellPosition to)
     in
@@ -600,8 +615,8 @@ indexToCellCenterBottomPosition index =
     }
 
 
-findFullPath : Board -> List Position
-findFullPath board =
+findFullPath : Board -> Bool -> List Position
+findFullPath board flying =
     let
         fullPath =
             List.foldl
@@ -610,7 +625,7 @@ findFullPath board =
                         Just from ->
                             let
                                 path =
-                                    findPath board from to
+                                    findPath board flying from to
                             in
                             if List.isEmpty path then
                                 []
@@ -631,12 +646,14 @@ findFullPath board =
 createEnemy : Board -> EnemyId -> Int -> LevelInfo -> Enemy
 createEnemy board enemyId spawnTime levelInfo =
     { position = indexToCellCenterBottomPosition startIndex
-    , path = findFullPath board
+    , path = findFullPath board levelInfo.flying
     , id = enemyId
     , hp = levelInfo.hp
     , maxHp = levelInfo.hp
     , damage = levelInfo.damage
     , spawnTime = spawnTime
+    , flying = levelInfo.flying
+    , boss = levelInfo.boss
     }
 
 
@@ -659,7 +676,7 @@ addTower cell model towersLeft =
             Array.set cell.index cellWithTower model.board
 
         pathAfterAddingTower =
-            not (List.isEmpty (findFullPath boardWithTower))
+            not (List.isEmpty (findFullPath boardWithTower False))
 
         success =
             towerAdded && pathAfterAddingTower
@@ -956,7 +973,6 @@ viewLeftSide model =
         , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
         , selection
         , viewLevels
-        , button [] [ text "Restart" ]
         ]
 
 
@@ -1075,9 +1091,26 @@ viewEnemy selected enemy =
 
         hpPercentage =
             (toFloat enemy.hp / toFloat enemy.maxHp) * 100
+
+        enemySize =
+            case ( enemy.flying, enemy.boss ) of
+                ( False, False ) ->
+                    baseEnemySize
+
+                ( False, True ) ->
+                    round (baseEnemySize * 1.8)
+
+                ( True, False ) ->
+                    round (baseEnemySize * 1.3)
+
+                ( True, True ) ->
+                    round (baseEnemySize * 2.5)
     in
     div
-        [ class "enemy"
+        [ classList
+            [ ( "enemy-flying", enemy.flying )
+            , ( "enemy", not enemy.flying )
+            ]
         , style "width" (intToPxString enemySize)
         , style "height" (intToPxString enemySize)
         , style "left" (intToPxString (enemy.position.x - (enemySize // 2)))
@@ -1095,8 +1128,8 @@ viewEnemy selected enemy =
             ++ (if enemySelected then
                     [ div
                         [ class "selection"
-                        , style "width" (intToPxString (cellSize - 5))
-                        , style "height" (intToPxString (cellSize - 5))
+                        , style "width" "120%"
+                        , style "height" "120%"
                         ]
                         []
                     ]

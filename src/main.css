@@ -138,14 +138,21 @@ h3 {
 .enemy {
     display: flex;
     align-items: center;
+    justify-content: center;
     position: absolute;
     background: url(/images/ghost.png) center no-repeat;
-    background-size: 80%;
+    background-size: 100%;
 }
 
-.enemy > .selection {
-    left: 2px;
+.enemy-flying {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    background: url(/images/bat.png) center no-repeat;
+    background-size: 100%;
 }
+
 
 .tower {
     width: 100%;
@@ -186,6 +193,7 @@ h3 {
     border-radius: 100%;
     z-index: 999;
 }
+
 .projectile {
     position: absolute;
     height: 1px;
@@ -230,6 +238,10 @@ h3 {
     align-items: center;
 }
 
+.special-text {
+    padding: 5px;
+}
+
 .tower-image {
     width: 30px;
     height: 30px;
@@ -268,12 +280,10 @@ h3 {
 
 .hp-bar {
     position: absolute;
-    height: 4px;
+    height: 3px;
     background-color: black;
-    width: 20px;
-    top: 1px;
-    margin: 0 auto;
-    left: 5px;
+    width: 80%;
+    top: 0;
 }
 
 .hp-bar-inner {
@@ -282,6 +292,7 @@ h3 {
 }
 
 .levels-table {
+    font-size: 14px;
     width: 100%;
 }
 
@@ -304,4 +315,13 @@ h3 {
 
 .game-over-overlay h1 {
     font-size: 70px;
+}
+
+.level-description {
+    border-bottom: 1px solid black;
+    padding-bottom: 6px;
+}
+
+.level-row td {
+    padding-top: 6px;
 }

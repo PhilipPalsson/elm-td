@@ -102,6 +102,8 @@ type alias Enemy =
     , maxHp : Int
     , damage : Int
     , spawnTime : Int
+    , flying : Bool
+    , boss : Bool
     }
 
 
@@ -191,6 +193,8 @@ enemyEncoder enemy =
         , ( "maxHp", Encode.int enemy.maxHp )
         , ( "damage", Encode.int enemy.damage )
         , ( "spawnTime", Encode.int enemy.spawnTime )
+        , ( "flying", Encode.bool enemy.flying )
+        , ( "boss", Encode.bool enemy.boss )
         ]
 
 
@@ -249,6 +253,7 @@ towerEncoder : Tower -> Encode.Value
 towerEncoder tower =
     Encode.object
         [ ( "damage", Encode.int tower.damage )
+        , ( "flyingDamage", Encode.float tower.flyingDamage )
         , ( "totalDamage", Encode.int tower.totalDamage )
         , ( "range", Encode.int tower.range )
         , ( "cellIndex", Encode.int tower.cellIndex )
@@ -361,6 +366,8 @@ enemyDecoder =
         |> Decode.andMap (Decode.field "maxHp" Decode.int)
         |> Decode.andMap (Decode.field "damage" Decode.int)
         |> Decode.andMap (Decode.field "spawnTime" Decode.int)
+        |> Decode.andMap (Decode.field "flying" Decode.bool)
+        |> Decode.andMap (Decode.field "boss" Decode.bool)
 
 
 gameStateDecoder : Decode.Decoder GameState
@@ -417,6 +424,7 @@ towerDecoder : Decode.Decoder Tower
 towerDecoder =
     Decode.succeed Tower
         |> Decode.andMap (Decode.field "damage" Decode.int)
+        |> Decode.andMap (Decode.field "flyingDamage" Decode.float)
         |> Decode.andMap (Decode.field "totalDamage" Decode.int)
         |> Decode.andMap (Decode.field "range" Decode.int)
         |> Decode.andMap (Decode.field "cellIndex" Decode.int)

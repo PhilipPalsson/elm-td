@@ -10,6 +10,7 @@ import Random exposing (Seed)
 
 type alias Tower =
     { damage : Int
+    , flyingDamage : Float
     , totalDamage : Int
     , range : Int
     , cellIndex : Int
@@ -373,6 +374,18 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                             ]
                         ]
                     ]
+                , if tower.flyingDamage > 1 then
+                    div
+                        [ class "special-text" ]
+                        [ text
+                            ("Special: Flying damage "
+                                ++ String.fromFloat (tower.flyingDamage * 100)
+                                ++ "%"
+                            )
+                        ]
+
+                  else
+                    div [] []
                 , div [ class "tower-images" ]
                     (List.map
                         (\tt ->
@@ -417,69 +430,70 @@ createTower towerType temporary cellIndex =
         values =
             case towerType of
                 Base Red 1 ->
-                    { range = 50, damage = 10, cooldown = fps, targets = 1 }
+                    { range = 50, damage = 10, flyingDamage = 3, cooldown = fps, targets = 1 }
 
                 Base Red 2 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Red 3 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Red _ ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 1 ->
-                    { range = 200, damage = 4, cooldown = fps, targets = 3 }
+                    { range = 200, damage = 4, flyingDamage = 1, cooldown = fps, targets = 3 }
 
                 Base Green 2 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 3 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Green _ ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 1 ->
-                    { range = 10000, damage = 5, cooldown = fps, targets = 1 }
+                    { range = 10000, damage = 5, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 2 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 3 ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue _ ->
-                    { range = 100, damage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Combined Purple ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1.5, cooldown = fps, targets = 10 }
 
                 Combined White ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined Pink ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined Yellow ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined Orange ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined Turquoise ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined BigGreen ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined BigRed ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
 
                 Combined BigBlue ->
-                    { range = 100, damage = 100, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
     in
     { damage = values.damage
+    , flyingDamage = values.flyingDamage
     , totalDamage = 0
     , range = values.range
     , cellIndex = cellIndex
@@ -522,7 +536,7 @@ viewTower selected tower =
                 Combined _ ->
                     blockHelper (towerTypeToCssString tower.towerType)
 
-                Base color int ->
+                Base _ _ ->
                     text ""
     in
     div
