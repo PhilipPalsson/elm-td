@@ -41,15 +41,13 @@ maxTowerLevel =
 
 
 type CombinedTower
-    = Purple
+    = Teal
     | White
+    | Purple
+    | Orange
+    | BigGreen
     | Pink
     | Yellow
-    | Orange
-    | Turquoise
-    | BigGreen
-    | BigRed
-    | BigBlue
 
 
 type TowerType
@@ -64,15 +62,13 @@ basicTowers =
 
 combinedTowers : List TowerType
 combinedTowers =
-    [ Combined Purple
-    , Combined Yellow
+    [ Combined White
+    , Combined Teal
+    , Combined Purple
     , Combined Orange
-    , Combined Turquoise
     , Combined BigGreen
-    , Combined BigRed
-    , Combined BigBlue
-    , Combined White
     , Combined Pink
+    , Combined Yellow
     ]
 
 
@@ -123,17 +119,11 @@ towerTypeToCssString towerType =
         Combined Orange ->
             "orange"
 
-        Combined Turquoise ->
-            "turquoise"
+        Combined Teal ->
+            "teal"
 
         Combined BigGreen ->
             "green"
-
-        Combined BigRed ->
-            "red"
-
-        Combined BigBlue ->
-            "blue"
 
 
 towerTypeString : TowerType -> String
@@ -191,17 +181,11 @@ towerTypeFromString string =
         "Orange" ->
             Combined Orange
 
-        "Turquoise" ->
-            Combined Turquoise
+        "Teal" ->
+            Combined Teal
 
         "BigGreen" ->
             Combined BigGreen
-
-        "BigRed" ->
-            Combined BigRed
-
-        "BigBlue" ->
-            Combined BigBlue
 
         _ ->
             Base Green 1
@@ -267,48 +251,36 @@ combinedTowerTypeString combinedTowerType =
         Orange ->
             "Orange"
 
-        Turquoise ->
-            "Turquoise"
+        Teal ->
+            "Teal"
 
         BigGreen ->
             "Big Green"
-
-        BigRed ->
-            "Big Red"
-
-        BigBlue ->
-            "Big Blue"
 
 
 towerCombination : TowerType -> List TowerType
 towerCombination towerType =
     case towerType of
+        Combined Teal ->
+            [ Base Blue 1, Base Blue 2, Base Green 1 ]
+
+        Combined White ->
+            [ Base Blue 1, Base Red 1, Base Green 1 ]
+
         Combined Purple ->
-            [ Base Blue 1, Base Red 1, Base Red 2 ]
-
-        Combined Pink ->
-            [ Combined White, Base Red 1, Combined Purple ]
-
-        Combined Yellow ->
-            [ Base Green 1, Base Green 2, Base Red 1 ]
+            [ Base Blue 2, Base Blue 3, Base Red 2 ]
 
         Combined Orange ->
-            [ Combined Yellow, Base Red 1, Base Red 2 ]
-
-        Combined Turquoise ->
-            [ Base Blue 2, Base Green 2, Base Blue 3 ]
+            [ Base Red 1, Base Red 2, Base Green 2 ]
 
         Combined BigGreen ->
             [ Base Green 1, Base Green 2, Base Green 3 ]
 
-        Combined BigRed ->
-            [ Base Red 1, Base Red 2, Base Red 3 ]
+        Combined Pink ->
+            [ Base Red 3, Combined White, Combined Purple ]
 
-        Combined BigBlue ->
-            [ Base Blue 1, Base Blue 2, Base Blue 3 ]
-
-        Combined White ->
-            [ Base Blue 3, Base Red 3, Base Green 3 ]
+        Combined Yellow ->
+            [ Combined White, Combined Orange, Combined BigGreen ]
 
         Base _ _ ->
             []
@@ -430,67 +402,55 @@ createTower towerType temporary cellIndex =
         values =
             case towerType of
                 Base Red 1 ->
-                    { range = 50, damage = 10, flyingDamage = 3, cooldown = fps, targets = 1 }
+                    { range = 200, damage = 7, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Red 2 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 200, damage = 12, flyingDamage = 1.5, cooldown = fps, targets = 1 }
 
                 Base Red 3 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
-
-                Base Red _ ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 200, damage = 50, flyingDamage = 2, cooldown = fps, targets = 1 }
 
                 Base Green 1 ->
-                    { range = 200, damage = 4, flyingDamage = 1, cooldown = fps, targets = 3 }
+                    { range = 80, damage = 12, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 2 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 90, damage = 20, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Green 3 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
-
-                Base Green _ ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 80, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Base Blue 1 ->
-                    { range = 10000, damage = 5, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 5, flyingDamage = 1, cooldown = fps, targets = 2 }
 
                 Base Blue 2 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 8, flyingDamage = 1, cooldown = fps, targets = 3 }
 
                 Base Blue 3 ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 35, flyingDamage = 1, cooldown = fps, targets = 4 }
 
-                Base Blue _ ->
-                    { range = 100, damage = 1, flyingDamage = 1, cooldown = fps, targets = 1 }
-
-                Combined Purple ->
-                    { range = 100, damage = 100, flyingDamage = 1.5, cooldown = fps, targets = 10 }
+                Combined Teal ->
+                    { range = 100, damage = 18, flyingDamage = 1, cooldown = fps, targets = 4 }
 
                 Combined White ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                    { range = 150, damage = 25, flyingDamage = 1, cooldown = fps, targets = 1 }
 
-                Combined Pink ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
-
-                Combined Yellow ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                Combined Purple ->
+                    { range = 100, damage = 60, flyingDamage = 1, cooldown = fps, targets = 5 }
 
                 Combined Orange ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
-
-                Combined Turquoise ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                    { range = 220, damage = 45, flyingDamage = 1, cooldown = fps, targets = 1 }
 
                 Combined BigGreen ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 1 }
 
-                Combined BigRed ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                Combined Pink ->
+                    { range = 180, damage = 90, flyingDamage = 1, cooldown = fps, targets = 8 }
 
-                Combined BigBlue ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 10 }
+                Combined Yellow ->
+                    { range = 180, damage = 180, flyingDamage = 1, cooldown = fps, targets = 1 }
+
+                _ ->
+                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 1 }
     in
     { damage = values.damage
     , flyingDamage = values.flyingDamage

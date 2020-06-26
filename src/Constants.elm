@@ -131,7 +131,7 @@ startingStones =
 
 
 buildsPerLevel =
-    3
+    4
 
 
 fps =

@@ -29,7 +29,7 @@ type Msg
 
 
 type GameMsg
-    = StepClicked
+    = Step
     | BuildCellClicked Cell
     | TowerClicked TowerId
     | StoneClicked CellIndex
@@ -54,20 +54,6 @@ type alias Model =
 init : Json.Decode.Value -> ( Model, Cmd Msg )
 init flags =
     let
-        default =
-            { board = initBoard
-            , enemies = []
-            , enemyIdCount = 0
-            , state = Build buildsPerLevel
-            , selected = NothingSelected
-            , towerIdCount = 0
-            , towers = Dict.empty
-            , projectiles = []
-            , hp = 100
-            , level = 1
-            , seed = initialSeed 1
-            }
-
         savedGameModel : Maybe GameModel
         savedGameModel =
             Json.Decode.decodeValue
@@ -89,9 +75,30 @@ init flags =
                 (Json.Decode.field "timestamp" Json.Decode.string)
                 flags
                 |> Result.toMaybe
+
+        seed =
+            Json.Decode.decodeValue
+                (Json.Decode.field "seed" Json.Decode.int)
+                flags
+                |> Result.toMaybe
+                |> Maybe.withDefault 1
+
+        default =
+            { board = initBoard
+            , enemies = []
+            , enemyIdCount = 0
+            , state = Build buildsPerLevel
+            , selected = NothingSelected
+            , towerIdCount = 0
+            , towers = Dict.empty
+            , projectiles = []
+            , hp = 100
+            , level = 1
+            , seed = initialSeed seed
+            }
     in
     ( { gameModel = default
-      , savedGameModel = savedGameModel
+      , savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
       , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
       }
     , Cmd.none
@@ -163,11 +170,11 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
             ( spawned, notSpawned ) =
                 List.partition (.spawnTime >> (==) 0) enemies
 
-            ( inRange, outOfRange ) =
-                List.partition enemyInRange spawned
+            ( validTargets, invalidTargets ) =
+                List.partition (\e -> enemyInRange e && e.hp > 0) spawned
 
             ( targets, outOfTargetCount ) =
-                List.Extra.splitAt tower.targets inRange
+                List.Extra.splitAt tower.targets validTargets
 
             afterDamage =
                 List.map dealDamage targets
@@ -207,7 +214,7 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
         in
         ( towersAfterAddingCooldown
           -- TODO check if this is the correct order to append the lists so towers don't switch targets
-        , afterDamage ++ outOfTargetCount ++ outOfRange ++ notSpawned
+        , afterDamage ++ outOfTargetCount ++ invalidTargets ++ notSpawned
         , projectiles ++ newProjectiles
         )
 
@@ -267,7 +274,7 @@ updateGame msg model =
     let
         newModel =
             case msg of
-                StepClicked ->
+                Step ->
                     let
                         aliveEnemies =
                             model.enemies
@@ -379,25 +386,38 @@ updateGame msg model =
 upgradeTower : GameModel -> TowerId -> TowerType -> GameModel
 upgradeTower model towerId upgradeTo =
     let
-        updatedTowers =
+        ( updatedBoard, updatedTowers ) =
             case Dict.get towerId model.towers of
                 Just tower ->
-                    List.filter ((/=) tower.towerType) (towerCombination upgradeTo)
-                        |> List.map
-                            (\towerType ->
-                                Dict.Extra.find
-                                    (\_ t -> t.towerType == towerType)
-                                    model.towers
-                            )
-                        |> List.filterMap identity
+                    let
+                        towersEntriesToReplace =
+                            towerCombination upgradeTo
+                                |> List.filter ((/=) tower.towerType)
+                                |> List.map
+                                    (\towerType ->
+                                        Dict.Extra.find
+                                            (\_ t -> t.towerType == towerType)
+                                            model.towers
+                                    )
+                                |> List.filterMap identity
+
+                        board =
+                            towersEntriesToReplace
+                                |> List.map Tuple.second
+                                |> List.map .cellIndex
+                                |> List.foldl (\index result -> addStoneToCell index result) model.board
+                    in
+                    ( board
+                    , towersEntriesToReplace
                         |> List.map Tuple.first
                         |> List.foldl (\id towers -> Dict.remove id towers) model.towers
-                        |> Dict.update towerId (Maybe.map (.cellIndex >> createTower upgradeTo True))
+                        |> Dict.update towerId (Maybe.map (.cellIndex >> createTower upgradeTo False))
+                    )
 
                 Nothing ->
-                    model.towers
+                    ( model.board, model.towers )
     in
-    { model | towers = updatedTowers }
+    { model | towers = updatedTowers, board = updatedBoard }
 
 
 spawnEnemies model =
@@ -804,9 +824,16 @@ moveEnemy ({ position } as enemy) =
 
         nextPosition : Position
         nextPosition =
-            { x = position.x + (deltaX * stepSize)
-            , y = position.y + (deltaY * stepSize)
-            }
+            if deltaX /= 0 && deltaY /= 0 then
+                -- When moving horizontal we need to decrease the distance
+                { x = position.x + round (toFloat deltaX * toFloat stepSize * 0.7)
+                , y = position.y + round (toFloat deltaY * toFloat stepSize * 0.7)
+                }
+
+            else
+                { x = position.x + (deltaX * stepSize)
+                , y = position.y + (deltaY * stepSize)
+                }
 
         ( newPosition, path ) =
             if calculateMovement nextPosition toPosition == ( 0, 0 ) then
@@ -1281,7 +1308,7 @@ viewStone selected =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.gameModel.state == Level then
-        Time.every (1000 / fps) (always (GameMsg StepClicked))
+        Time.every (1000 / fps) (always (GameMsg Step))
 
     else
         Sub.none
