@@ -18,7 +18,7 @@ import Ports exposing (saveState)
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
 import Time
-import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
+import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, availableUpgrades, createTower, getTowerData, getTowerType, viewTower, viewTowerInformation)
 import Types exposing (Board, Cell, CellIndex, CellObject(..), CellType(..), Enemy, EnemyId, GameModel, GameState(..), Position, Projectile, Projectiles, Selected(..), Towers, gameModelDecoder, gameModelEncoder)
 
 
@@ -271,7 +271,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                             ++ [ { enemyId = enemy.id
                                  , from = towerPosition
                                  , ttl = 12
-                                 , color = towerTypeToCssString tower.towerType
+                                 , color = tower.color
                                  , miss = not hit
                                  }
                                ]
@@ -515,8 +515,11 @@ upgradeTower model towerId upgradeTo =
             case Dict.get towerId model.towers of
                 Just tower ->
                     let
+                        combinations =
+                            (getTowerData tower.towerType).combinations
+
                         towersEntriesToReplace =
-                            towerCombination upgradeTo
+                            combinations
                                 |> List.filter ((/=) tower.towerType)
                                 |> List.map
                                     (\towerType ->
@@ -1058,7 +1061,7 @@ viewSelectedTowerInfo model tower towerId =
     in
     div []
         ([ div []
-            [ span [] [ text ("Tower " ++ towerTypeString tower.towerType) ]
+            [ span [] [ text ("Tower " ++ tower.name) ]
             , if tower.temporary then
                 if model.state == Build 0 then
                     button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
@@ -1074,7 +1077,7 @@ viewSelectedTowerInfo model tower towerId =
                 (\upgrade ->
                     button
                         [ onClick (UpgradeTowerClicked towerId upgrade) ]
-                        [ text (towerTypeString upgrade) ]
+                        [ text (getTowerData upgrade).name ]
                 )
                 upgrades
             ++ [ div [] [ text towerInfoString ] ]

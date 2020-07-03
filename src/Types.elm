@@ -23,7 +23,7 @@ import Json.Decode as Decode
 import Json.Decode.Extra as Decode
 import Json.Encode as Encode
 import Random exposing (Seed)
-import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, towerTypeFromString, towerTypeString)
+import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, getTowerData, towerTypeFromString)
 
 
 type GameState
@@ -262,7 +262,7 @@ selectedEncoder selected =
 
 towerTypeEncoder : TowerType -> Encode.Value
 towerTypeEncoder towerType =
-    Encode.string (towerTypeString towerType)
+    Encode.string (getTowerData towerType).name
 
 
 towerEffectsEncoder : TowerEffect -> Encode.Value
@@ -286,7 +286,9 @@ towerEffectsEncoder towerEffect =
 towerEncoder : Tower -> Encode.Value
 towerEncoder tower =
     Encode.object
-        [ ( "damage", Encode.int tower.damage )
+        [ ( "name", Encode.string tower.name )
+        , ( "color", Encode.string tower.color )
+        , ( "damage", Encode.int tower.damage )
         , ( "totalDamage", Encode.int tower.totalDamage )
         , ( "range", Encode.int tower.range )
         , ( "cellIndex", Encode.int tower.cellIndex )
@@ -510,6 +512,8 @@ towerEffectDecoder =
 towerDecoder : Decode.Decoder Tower
 towerDecoder =
     Decode.succeed Tower
+        |> Decode.andMap (Decode.field "name" Decode.string)
+        |> Decode.andMap (Decode.field "color" Decode.string)
         |> Decode.andMap (Decode.field "damage" Decode.int)
         |> Decode.andMap (Decode.field "totalDamage" Decode.int)
         |> Decode.andMap (Decode.field "range" Decode.int)

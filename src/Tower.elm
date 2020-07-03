@@ -1,6 +1,7 @@
 module Tower exposing (..)
 
-import Constants exposing (cellSize, fps)
+import Array
+import Constants exposing (cellSize)
 import Helper exposing (intToPxString)
 import Html exposing (Html, div, h3, table, td, text, th, tr)
 import Html.Attributes exposing (class, style)
@@ -9,7 +10,9 @@ import Random exposing (Seed)
 
 
 type alias Tower =
-    { damage : Int
+    { name : String
+    , color : String
+    , damage : Int
     , totalDamage : Int
     , range : Int
     , cellIndex : Int
@@ -26,23 +29,20 @@ type alias TowerId =
     Int
 
 
-type Color
-    = Green
-    | Red
-    | Blue
-    | Black
-
-
-colors =
-    [ Red, Green, Blue, Black ]
-
-
-maxTowerLevel =
-    3
-
-
-type CombinedTower
-    = White
+type TowerType
+    = Red1
+    | Red2
+    | Red3
+    | Green1
+    | Green2
+    | Green3
+    | Blue1
+    | Blue2
+    | Blue3
+    | Black1
+    | Black2
+    | Black3
+    | White
     | Teal
     | Purple
     | Orange
@@ -51,11 +51,6 @@ type CombinedTower
     | Pink
     | Yellow
     | Gold
-
-
-type TowerType
-    = Base Color Int
-    | Combined CombinedTower
 
 
 type TowerEffect
@@ -67,274 +62,378 @@ type TowerEffect
 
 basicTowers : List TowerType
 basicTowers =
-    List.foldl (++) [] (List.map (\color -> List.map (Base color) (List.range 1 maxTowerLevel)) colors)
+    [ Red1
+    , Red2
+    , Red3
+    , Green1
+    , Green2
+    , Green3
+    , Blue1
+    , Blue2
+    , Blue3
+    , Black1
+    , Black2
+    , Black3
+    ]
 
 
 combinedTowers : List TowerType
 combinedTowers =
-    [ Combined White
-    , Combined Teal
-    , Combined Orange
-    , Combined Purple
-    , Combined Grey
-    , Combined DarkBlue
-    , Combined Pink
-    , Combined Yellow
-    , Combined Gold
+    [ White
+    , Teal
+    , Orange
+    , Purple
+    , Grey
+    , DarkBlue
+    , Pink
+    , Yellow
+    , Gold
     ]
 
 
-colorToCssString : Color -> String
-colorToCssString color =
-    case color of
-        Green ->
-            "green"
-
-        Red ->
-            "red"
-
-        Blue ->
-            "blue"
-
-        Black ->
-            "black"
+type alias TowerData =
+    { name : String
+    , range : Int
+    , damage : Int
+    , rate : Int
+    , effects : List TowerEffect
+    , targets : Int
+    , color : String
+    , combinations : List TowerType
+    }
 
 
-colorToString : Color -> String
-colorToString color =
-    case color of
-        Green ->
-            "Green"
-
-        Red ->
-            "Red"
-
-        Blue ->
-            "Blue"
-
-        Black ->
-            "Black"
-
-
-towerTypeToCssString : TowerType -> String
-towerTypeToCssString towerType =
+getTowerData : TowerType -> TowerData
+getTowerData towerType =
     case towerType of
-        Base color _ ->
-            colorToCssString color
+        Red1 ->
+            { name = "Red 1"
+            , range = 80
+            , damage = 6
+            , rate = 100
+            , effects = [ SpeedAura 10 ]
+            , targets = 1
+            , color = "red"
+            , combinations = []
+            }
 
-        Combined Purple ->
-            "purple"
+        Red2 ->
+            { name = "Red 2"
+            , range = 80
+            , damage = 12
+            , rate = 100
+            , effects = [ SpeedAura 20 ]
+            , targets = 1
+            , color = "red"
+            , combinations = []
+            }
 
-        Combined White ->
-            "white"
+        Red3 ->
+            { name = "Red 3"
+            , range = 80
+            , damage = 36
+            , rate = 100
+            , effects = [ SpeedAura 30 ]
+            , targets = 1
+            , color = "red"
+            , combinations = []
+            }
 
-        Combined Pink ->
-            "pink"
+        Green1 ->
+            { name = "Green 1"
+            , range = 100
+            , damage = 15
+            , rate = 100
+            , effects = []
+            , targets = 1
+            , color = "green"
+            , combinations = []
+            }
 
-        Combined Yellow ->
-            "yellow"
+        Green2 ->
+            { name = "Green 2"
+            , range = 100
+            , damage = 30
+            , rate = 100
+            , effects = []
+            , targets = 1
+            , color = "green"
+            , combinations = []
+            }
 
-        Combined Orange ->
-            "orange"
+        Green3 ->
+            { name = "Green 3"
+            , range = 100
+            , damage = 90
+            , rate = 100
+            , effects = []
+            , targets = 1
+            , color = "green"
+            , combinations = []
+            }
 
-        Combined Teal ->
-            "teal"
+        Blue1 ->
+            { name = "Blue 1"
+            , range = 125
+            , damage = 10
+            , rate = 100
+            , effects = [ SlowEffect 10 ]
+            , targets = 1
+            , color = "blue"
+            , combinations = []
+            }
 
-        Combined DarkBlue ->
-            "darkblue"
+        Blue2 ->
+            { name = "Blue 2"
+            , range = 125
+            , damage = 20
+            , rate = 100
+            , effects = [ SlowEffect 20 ]
+            , targets = 1
+            , color = "blue"
+            , combinations = []
+            }
 
-        Combined Grey ->
-            "darkgrey"
+        Blue3 ->
+            { name = "Blue 3"
+            , range = 125
+            , damage = 60
+            , rate = 100
+            , effects = [ SlowEffect 30 ]
+            , targets = 1
+            , color = "blue"
+            , combinations = []
+            }
 
-        Combined Gold ->
-            "gold"
+        Black1 ->
+            { name = "Black 1"
+            , range = 100
+            , damage = 5
+            , rate = 100
+            , effects = []
+            , targets = 2
+            , color = "black"
+            , combinations = []
+            }
 
+        Black2 ->
+            { name = "Black 2"
+            , range = 100
+            , damage = 10
+            , rate = 100
+            , effects = []
+            , targets = 3
+            , color = "black"
+            , combinations = []
+            }
 
-towerTypeString : TowerType -> String
-towerTypeString towerType =
-    case towerType of
-        Base color level ->
-            colorToString color ++ " " ++ String.fromInt level
+        Black3 ->
+            { name = "Black 3"
+            , range = 100
+            , damage = 30
+            , rate = 100
+            , effects = []
+            , targets = 4
+            , color = "black"
+            , combinations = []
+            }
 
-        Combined combinedTower ->
-            combinedTowerTypeString combinedTower
+        White ->
+            { name = "White"
+            , range = 150
+            , damage = 35
+            , rate = 140
+            , effects = []
+            , targets = 1
+            , color = "white"
+            , combinations = [ Blue1, Red1, Green1 ]
+            }
+
+        Teal ->
+            { name = "Teal"
+            , range = 150
+            , damage = 23
+            , rate = 140
+            , effects = []
+            , targets = 3
+            , color = "teal"
+            , combinations = [ Blue1, Black1, Green1 ]
+            }
+
+        Orange ->
+            { name = "Orange"
+            , range = 100
+            , damage = 65
+            , rate = 120
+            , effects = [ SpeedAura 20 ]
+            , targets = 1
+            , color = "orange"
+            , combinations = [ Red1, Red2, Green2 ]
+            }
+
+        Purple ->
+            { name = "Purple"
+            , range = 150
+            , damage = 85
+            , rate = 110
+            , effects = [ TrueStrike ]
+            , targets = 1
+            , color = "purple"
+            , combinations = [ Blue2, Black2, Red2 ]
+            }
+
+        Grey ->
+            { name = "Grey"
+            , range = 150
+            , damage = 50
+            , rate = 100
+            , effects = [ FlyingDamage 1.8 ]
+            , targets = 5
+            , color = "darkgrey"
+            , combinations = [ Black1, Black2, White ]
+            }
+
+        DarkBlue ->
+            { name = "Dark Blue"
+            , range = 85
+            , damage = 40
+            , rate = 60
+            , effects = [ SlowEffect 75 ]
+            , targets = 10
+            , color = "darkblue"
+            , combinations = [ Blue2, Blue3, Black3 ]
+            }
+
+        Pink ->
+            { name = "Pink"
+            , range = 180
+            , damage = 115
+            , rate = 125
+            , effects = [ TrueStrike, SpeedAura 40 ]
+            , targets = 1
+            , color = "pink"
+            , combinations = [ Red3, White, Purple ]
+            }
+
+        Yellow ->
+            { name = "Yellow"
+            , range = 180
+            , damage = 180
+            , rate = 160
+            , effects = []
+            , targets = 1
+            , color = "yellow"
+            , combinations = [ White, Orange, Green3 ]
+            }
+
+        Gold ->
+            { name = "Gold"
+            , range = 180
+            , damage = 180
+            , rate = 160
+            , effects = []
+            , targets = 4
+            , color = "gold"
+            , combinations = [ Yellow, Black1, Black2 ]
+            }
 
 
 towerTypeFromString : String -> TowerType
 towerTypeFromString string =
     case string of
         "Red 1" ->
-            Base Red 1
+            Red1
 
         "Red 2" ->
-            Base Red 2
+            Red2
 
         "Red 3" ->
-            Base Red 3
+            Red3
 
         "Green 1" ->
-            Base Green 1
+            Green1
 
         "Green 2" ->
-            Base Green 2
+            Green2
 
         "Green 3" ->
-            Base Green 3
+            Green3
 
         "Blue 1" ->
-            Base Blue 1
+            Blue1
 
         "Blue 2" ->
-            Base Blue 2
+            Blue2
 
         "Blue 3" ->
-            Base Blue 3
+            Blue3
 
         "Black 1" ->
-            Base Black 1
+            Black1
 
         "Black 2" ->
-            Base Black 2
+            Black2
 
         "Black 3" ->
-            Base Black 3
+            Black3
 
         "Purple" ->
-            Combined Purple
+            Purple
 
         "White" ->
-            Combined White
+            White
 
         "Pink" ->
-            Combined Pink
+            Pink
 
         "Yellow" ->
-            Combined Yellow
+            Yellow
 
         "Orange" ->
-            Combined Orange
+            Orange
 
         "Teal" ->
-            Combined Teal
+            Teal
 
         "DarkBlue" ->
-            Combined DarkBlue
+            DarkBlue
 
         "Grey" ->
-            Combined Grey
+            Grey
 
         "Gold" ->
-            Combined Gold
+            Gold
 
         _ ->
-            Base Green 1
+            Green1
 
 
-getTowerType : Seed -> List Int -> ( Seed, TowerType )
-getTowerType seed chances =
+getTowerType : Seed -> ( Int, Int, Int ) -> ( Seed, TowerType )
+getTowerType seed ( chanceLevel1, chanceLevel2, chanceLevel3 ) =
     let
-        splitInFour value =
-            List.repeat (List.length colors) (value // List.length colors)
-
-        chancesBuildUp =
-            List.foldl
-                (\value acc ->
-                    let
-                        from =
-                            List.Extra.last acc
-                                |> Maybe.map Tuple.second
-                                |> Maybe.withDefault 0
-                    in
-                    acc ++ [ ( from, from + value ) ]
-                )
-                []
-                (List.foldl (\chance acc -> acc ++ splitInFour chance) [] chances)
+        towerDistributionList =
+            List.repeat (chanceLevel1 // 4) Red1
+                ++ List.repeat (chanceLevel1 // 4) Green1
+                ++ List.repeat (chanceLevel1 // 4) Blue1
+                ++ List.repeat (chanceLevel1 // 4) Black1
+                ++ List.repeat (chanceLevel2 // 4) Red2
+                ++ List.repeat (chanceLevel2 // 4) Green2
+                ++ List.repeat (chanceLevel2 // 4) Blue2
+                ++ List.repeat (chanceLevel2 // 4) Black2
+                ++ List.repeat (chanceLevel3 // 4) Red3
+                ++ List.repeat (chanceLevel3 // 4) Green3
+                ++ List.repeat (chanceLevel3 // 4) Blue3
+                ++ List.repeat (chanceLevel3 // 4) Black3
 
         ( random, newSeed ) =
-            Random.step (Random.int 0 (List.sum chances)) seed
-
-        sortTowers towerType =
-            case towerType of
-                Base _ int ->
-                    int
-
-                Combined _ ->
-                    0
-
-        chanceList =
-            List.Extra.zip chancesBuildUp (List.sortBy sortTowers basicTowers)
+            Random.step (Random.int 0 (List.length towerDistributionList)) seed
     in
     ( newSeed
-    , chanceList
-        |> List.Extra.find (\( ( from, to ), _ ) -> from <= random && random < to)
-        |> Maybe.map Tuple.second
-        |> Maybe.withDefault (Base Green 1)
+    , towerDistributionList
+        |> Array.fromList
+        |> Array.get random
+        |> Maybe.withDefault Red1
     )
-
-
-combinedTowerTypeString : CombinedTower -> String
-combinedTowerTypeString combinedTowerType =
-    case combinedTowerType of
-        Purple ->
-            "Purple"
-
-        White ->
-            "White"
-
-        Pink ->
-            "Pink"
-
-        Yellow ->
-            "Yellow"
-
-        Orange ->
-            "Orange"
-
-        Teal ->
-            "Teal"
-
-        Grey ->
-            "Grey"
-
-        DarkBlue ->
-            "Dark blue"
-
-        Gold ->
-            "Gold"
-
-
-towerCombination : TowerType -> List TowerType
-towerCombination towerType =
-    case towerType of
-        Combined White ->
-            [ Base Blue 1, Base Red 1, Base Green 1 ]
-
-        Combined Teal ->
-            [ Base Blue 1, Base Black 1, Base Green 1 ]
-
-        Combined Purple ->
-            [ Base Blue 2, Base Black 2, Base Red 2 ]
-
-        Combined Orange ->
-            [ Base Red 1, Base Red 2, Base Green 2 ]
-
-        Combined Grey ->
-            [ Base Black 1, Base Black 2, Combined White ]
-
-        Combined DarkBlue ->
-            [ Base Blue 2, Base Blue 3, Base Black 3 ]
-
-        Combined Pink ->
-            [ Base Red 3, Combined White, Combined Purple ]
-
-        Combined Yellow ->
-            [ Combined White, Combined Orange, Base Green 3 ]
-
-        Combined Gold ->
-            [ Combined Yellow, Base Black 1, Base Black 2 ]
-
-        Base _ _ ->
-            []
 
 
 towerCombinations : List ( TowerType, List TowerType )
@@ -342,7 +441,7 @@ towerCombinations =
     List.map
         (\towerType ->
             ( towerType
-            , towerCombination towerType
+            , (getTowerData towerType).combinations
             )
         )
         combinedTowers
@@ -389,7 +488,7 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                     dps * toFloat tower.targets
 
                 combinations =
-                    towerCombination towerType
+                    (getTowerData towerType).combinations
             in
             div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
                 [ div [ class "tower-block-inner" ]
@@ -468,120 +567,113 @@ towerInfoClass haveTemporarily have =
 createTower : TowerType -> Bool -> Int -> Tower
 createTower towerType temporary cellIndex =
     let
-        values =
-            case towerType of
-                Base Red 1 ->
-                    { range = 80, damage = 6, rate = 100, effects = [ SpeedAura 10 ], targets = 1 }
-
-                Base Red 2 ->
-                    { range = 80, damage = 12, rate = 100, effects = [ SpeedAura 20 ], targets = 1 }
-
-                Base Red 3 ->
-                    { range = 80, damage = 36, rate = 100, effects = [ SpeedAura 30 ], targets = 1 }
-
-                Base Green 1 ->
-                    { range = 100, damage = 15, rate = 100, effects = [], targets = 1 }
-
-                Base Green 2 ->
-                    { range = 100, damage = 30, rate = 100, effects = [], targets = 1 }
-
-                Base Green 3 ->
-                    { range = 100, damage = 90, rate = 100, effects = [], targets = 1 }
-
-                Base Blue 1 ->
-                    { range = 125, damage = 10, rate = 100, effects = [ SlowEffect 10 ], targets = 1 }
-
-                Base Blue 2 ->
-                    { range = 125, damage = 20, rate = 100, effects = [ SlowEffect 20 ], targets = 1 }
-
-                Base Blue 3 ->
-                    { range = 125, damage = 60, rate = 100, effects = [ SlowEffect 30 ], targets = 1 }
-
-                Base Black 1 ->
-                    { range = 100, damage = 5, rate = 100, effects = [], targets = 2 }
-
-                Base Black 2 ->
-                    { range = 100, damage = 10, rate = 100, effects = [], targets = 3 }
-
-                Base Black 3 ->
-                    { range = 100, damage = 30, rate = 100, effects = [], targets = 4 }
-
-                Combined White ->
-                    { range = 150, damage = 35, rate = 140, effects = [], targets = 1 }
-
-                Combined Teal ->
-                    { range = 150, damage = 23, rate = 140, effects = [], targets = 3 }
-
-                Combined Orange ->
-                    { range = 100, damage = 65, rate = 120, effects = [ SpeedAura 20 ], targets = 1 }
-
-                Combined Purple ->
-                    { range = 150, damage = 85, rate = 110, effects = [ TrueStrike ], targets = 1 }
-
-                Combined Grey ->
-                    { range = 150, damage = 50, rate = 100, effects = [ FlyingDamage 1.8 ], targets = 5 }
-
-                Combined DarkBlue ->
-                    { range = 85, damage = 40, rate = 60, effects = [ SlowEffect 75 ], targets = 10 }
-
-                Combined Pink ->
-                    { range = 180, damage = 115, rate = 125, effects = [ TrueStrike, SpeedAura 40 ], targets = 1 }
-
-                Combined Yellow ->
-                    { range = 180, damage = 180, rate = 160, effects = [], targets = 1 }
-
-                Combined Gold ->
-                    { range = 180, damage = 180, rate = 160, effects = [], targets = 4 }
-
-                _ ->
-                    { range = 100, damage = 100, rate = 100, effects = [], targets = 1 }
+        towerData =
+            getTowerData towerType
     in
-    { damage = values.damage
+    { name = towerData.name
+    , damage = towerData.damage
     , totalDamage = 0
-    , range = values.range
+    , range = towerData.range
     , cellIndex = cellIndex
-    , rate = values.rate
+    , rate = towerData.rate
     , cooldown = 0
-    , targets = values.targets
+    , targets = towerData.targets
     , temporary = temporary
     , towerType = towerType
-    , effects = values.effects
+    , effects = towerData.effects
+    , color = towerData.color
     }
 
 
 viewTower : Bool -> Tower -> Html msg
 viewTower selected tower =
     let
-        bar color index =
+        ( barCount, shouldHaveBlock ) =
+            case tower.towerType of
+                Red1 ->
+                    ( 1, False )
+
+                Red2 ->
+                    ( 2, False )
+
+                Red3 ->
+                    ( 3, False )
+
+                Green1 ->
+                    ( 1, False )
+
+                Green2 ->
+                    ( 2, False )
+
+                Green3 ->
+                    ( 3, False )
+
+                Blue1 ->
+                    ( 1, False )
+
+                Blue2 ->
+                    ( 2, False )
+
+                Blue3 ->
+                    ( 3, False )
+
+                Black1 ->
+                    ( 1, False )
+
+                Black2 ->
+                    ( 2, False )
+
+                Black3 ->
+                    ( 3, False )
+
+                White ->
+                    ( 0, True )
+
+                Teal ->
+                    ( 0, True )
+
+                Purple ->
+                    ( 0, True )
+
+                Orange ->
+                    ( 0, True )
+
+                Grey ->
+                    ( 0, True )
+
+                DarkBlue ->
+                    ( 0, True )
+
+                Pink ->
+                    ( 0, True )
+
+                Yellow ->
+                    ( 0, True )
+
+                Gold ->
+                    ( 0, True )
+
+        bar index =
             div
                 [ class "bar"
                 , style "bottom" (intToPxString ((index * 4) - 1))
-                , style "background-color" (colorToCssString color)
+                , style "background-color" tower.color
                 ]
                 []
 
         bars =
-            case tower.towerType of
-                Base color int ->
-                    List.map (bar color) (List.range 1 int)
-
-                Combined _ ->
-                    []
-
-        blockHelper color =
-            div
-                [ class "block"
-                , style "background-color" color
-                ]
-                []
+            List.map bar (List.range 1 barCount)
 
         block =
-            case tower.towerType of
-                Combined _ ->
-                    blockHelper (towerTypeToCssString tower.towerType)
+            if shouldHaveBlock then
+                div
+                    [ class "block"
+                    , style "background-color" tower.color
+                    ]
+                    []
 
-                Base _ _ ->
-                    text ""
+            else
+                text ""
     in
     div
         [ class "tower"
