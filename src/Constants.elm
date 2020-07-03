@@ -13,10 +13,6 @@ cellSize =
     30
 
 
-stepSize =
-    100
-
-
 baseEnemySize =
     24
 

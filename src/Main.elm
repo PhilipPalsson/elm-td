@@ -4,7 +4,23 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
-import Constants exposing (baseEnemySize, blockedGrassIndices, blockedPathIndices, boardHeight, boardUpscale, boardWidth, buildsPerLevel, cellSize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
+import Constants
+    exposing
+        ( baseEnemySize
+        , blockedGrassIndices
+        , blockedPathIndices
+        , boardHeight
+        , boardUpscale
+        , boardWidth
+        , buildsPerLevel
+        , cellSize
+        , fps
+        , goalIndex
+        , pathIndicies
+        , postIndices
+        , startIndex
+        , startingStones
+        )
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
@@ -18,8 +34,38 @@ import Ports exposing (saveState)
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
 import Time
-import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, availableUpgrades, createTower, getTowerData, getTowerType, viewTower, viewTowerInformation)
-import Types exposing (Board, Cell, CellIndex, CellObject(..), CellType(..), Enemy, EnemyId, GameModel, GameState(..), Position, Projectile, Projectiles, Selected(..), Towers, gameModelDecoder, gameModelEncoder)
+import Tower
+    exposing
+        ( Tower
+        , TowerEffect(..)
+        , TowerId
+        , TowerType
+        , availableUpgrades
+        , createTower
+        , getTowerData
+        , getTowerType
+        , viewTower
+        , viewTowerInformation
+        )
+import Types
+    exposing
+        ( Board
+        , Cell
+        , CellIndex
+        , CellObject(..)
+        , CellType(..)
+        , Enemy
+        , EnemyId
+        , GameModel
+        , GameState(..)
+        , Position
+        , Projectile
+        , Projectiles
+        , Selected(..)
+        , Towers
+        , gameModelDecoder
+        , gameModelEncoder
+        )
 
 
 type Msg
@@ -552,11 +598,18 @@ spawnEnemies model =
     let
         levelInfo =
             getLevelInfo model.level
+
+        delayBetweenEnemiesFactor =
+            (toFloat 100 / toFloat levelInfo.speed) * fps
     in
     List.range 0 (levelInfo.enemyCount - 1)
         |> List.map
             (\index ->
-                createEnemy model.board (model.enemyIdCount + index) (index * fps) levelInfo
+                createEnemy
+                    model.board
+                    (model.enemyIdCount + index)
+                    (round (toFloat index * delayBetweenEnemiesFactor))
+                    levelInfo
             )
 
 
@@ -800,6 +853,8 @@ createEnemy board enemyId spawnTime levelInfo =
     , flying = levelInfo.flying
     , boss = levelInfo.boss
     , effects = []
+    , baseSpeed = levelInfo.speed
+    , magicImmune = levelInfo.magicImmune
     }
 
 
@@ -906,8 +961,8 @@ addStoneToCell cellIndex board =
     Array.Extra.update cellIndex newCell board
 
 
-calculateMovement : Position -> Position -> ( Int, Int )
-calculateMovement from to =
+calculateMovement : Int -> Position -> Position -> ( Int, Int )
+calculateMovement speed from to =
     let
         deltaX =
             to.x - from.x
@@ -915,18 +970,18 @@ calculateMovement from to =
         deltaY =
             to.y - from.y
     in
-    ( if deltaX > stepSize then
+    ( if deltaX > speed then
         1
 
-      else if deltaX < -stepSize then
+      else if deltaX < -speed then
         -1
 
       else
         0
-    , if deltaY > stepSize then
+    , if deltaY > speed then
         1
 
-      else if deltaY < -stepSize then
+      else if deltaY < -speed then
         -1
 
       else
@@ -946,30 +1001,34 @@ moveEnemy ({ position } as enemy) =
                     position
 
         ( deltaX, deltaY ) =
-            calculateMovement position toPosition
+            calculateMovement enemy.baseSpeed position toPosition
 
         slowEffect =
-            enemy.effects
-                |> List.map
-                    (\effect ->
-                        case effect.effectType of
-                            SlowEffect value ->
-                                1 - (toFloat value / 100)
+            if enemy.magicImmune then
+                1
 
-                            _ ->
-                                0
-                    )
-                |> Set.fromList
-                -- Remove duplicates since same slow effect don't stack
-                |> Set.toList
-                |> List.product
+            else
+                enemy.effects
+                    |> List.map
+                        (\effect ->
+                            case effect.effectType of
+                                SlowEffect value ->
+                                    1 - (toFloat value / 100)
+
+                                _ ->
+                                    0
+                        )
+                    |> Set.fromList
+                    -- Remove duplicates since same slow effect don't stack
+                    |> Set.toList
+                    |> List.product
 
         speed =
             if deltaX /= 0 && deltaY /= 0 then
-                toFloat stepSize * 0.7 * slowEffect
+                toFloat enemy.baseSpeed * 0.7 * slowEffect
 
             else
-                toFloat stepSize * slowEffect
+                toFloat enemy.baseSpeed * slowEffect
 
         nextPosition : Position
         nextPosition =
@@ -978,7 +1037,7 @@ moveEnemy ({ position } as enemy) =
             }
 
         ( newPosition, path ) =
-            if calculateMovement nextPosition toPosition == ( 0, 0 ) then
+            if calculateMovement enemy.baseSpeed nextPosition toPosition == ( 0, 0 ) then
                 --We have reached the position
                 ( toPosition, List.tail enemy.path |> Maybe.withDefault [] )
 

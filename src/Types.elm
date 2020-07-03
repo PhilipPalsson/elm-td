@@ -106,6 +106,8 @@ type alias Enemy =
     , flying : Bool
     , boss : Bool
     , effects : List EnemyEffect
+    , baseSpeed : Int
+    , magicImmune : Bool
     }
 
 
@@ -211,6 +213,8 @@ enemyEncoder enemy =
         , ( "flying", Encode.bool enemy.flying )
         , ( "boss", Encode.bool enemy.boss )
         , ( "effects", Encode.list enemyEffectEncoder enemy.effects )
+        , ( "baseSpeed", Encode.int enemy.baseSpeed )
+        , ( "magicImmune", Encode.bool enemy.magicImmune )
         ]
 
 
@@ -414,6 +418,8 @@ enemyDecoder =
         |> Decode.andMap (Decode.field "flying" Decode.bool)
         |> Decode.andMap (Decode.field "boss" Decode.bool)
         |> Decode.andMap (Decode.field "effects" (Decode.list effectsDecoder))
+        |> Decode.andMap (Decode.field "baseSpeed" Decode.int)
+        |> Decode.andMap (Decode.field "magicImmune" Decode.bool)
 
 
 gameStateDecoder : Decode.Decoder GameState
