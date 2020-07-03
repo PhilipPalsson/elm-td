@@ -130,13 +130,17 @@ viewLevel currentLevel level =
             , td [] [ text (String.fromInt levelInfo.damage) ]
             , td [] [ text (chancesString levelInfo.buildChances) ]
             ]
-        , tr [] [ td [ class "level-description", colspan 10 ] [ text description ] ]
+        , if String.isEmpty description then
+            text ""
+
+          else
+            tr [] [ td [ class "level-description", colspan 10 ] [ text description ] ]
         ]
 
 
 viewLevels : Int -> Html msg
 viewLevels currentLevel =
-    div []
+    div [ class "card levels-card" ]
         [ h3 [] [ text "Levels" ]
         , table [ class "levels-table" ]
             ([ tr []

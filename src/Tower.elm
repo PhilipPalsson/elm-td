@@ -489,9 +489,12 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
 
                 combinations =
                     (getTowerData towerType).combinations
+
+                specialText =
+                    tower.effects |> List.map effectString |> String.join ", "
             in
-            div [ class "tower-block", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
-                [ div [ class "tower-block-inner" ]
+            div [ class "card", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
+                [ div [ class "tower-block" ]
                     [ div [ class "tower-image" ]
                         [ viewTower False tower
                         ]
@@ -522,22 +525,30 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                             ]
                         ]
                     ]
-                , div
-                    [ class "special-text" ]
-                    [ text (tower.effects |> List.map effectString |> String.join ", ")
-                    ]
-                , div [ class "tower-images" ]
-                    (List.map
-                        (\tt ->
-                            div
-                                [ class "tower-image"
-                                , class
-                                    (towerInfoClass (haveTemporarily tt) (have tt))
-                                ]
-                                [ viewTower False (createTower tt False 0) ]
+                , if String.isEmpty specialText then
+                    text ""
+
+                  else
+                    div
+                        [ class "special-text" ]
+                        [ text specialText
+                        ]
+                , if List.isEmpty combinations then
+                    text ""
+
+                  else
+                    div [ class "tower-images" ]
+                        (List.map
+                            (\tt ->
+                                div
+                                    [ class "tower-image"
+                                    , class
+                                        (towerInfoClass (haveTemporarily tt) (have tt))
+                                    ]
+                                    [ viewTower False (createTower tt False 0) ]
+                            )
+                            combinations
                         )
-                        combinations
-                    )
                 ]
     in
     div []

@@ -84,7 +84,6 @@ type GameMsg
     | RemoveStoneButtonClicked CellIndex
     | KeepTowerClicked TowerId
     | UpgradeTowerClicked TowerId TowerType
-    | OutsideBoardClicked
     | PauseButtonClicked
     | ResumeButtonClicked
     | GoalClicked
@@ -532,9 +531,6 @@ updateGame msg model =
 
                 UpgradeTowerClicked towerId towerType ->
                     upgradeTower model towerId towerType
-
-                OutsideBoardClicked ->
-                    { model | selected = NothingSelected }
 
                 PauseButtonClicked ->
                     { model | state = Paused }
@@ -1089,7 +1085,7 @@ viewGameOverOverlay model =
             ]
 
     else
-        div [] []
+        text ""
 
 
 viewSelectedTowerInfo : GameModel -> Tower -> TowerId -> Html GameMsg
@@ -1110,13 +1106,6 @@ viewSelectedTowerInfo model tower towerId =
             auras
                 |> List.map (\percent -> String.fromInt percent ++ "%")
                 |> String.join ", "
-
-        towerInfoString =
-            if tower.temporary then
-                ""
-
-            else
-                "Total damage: " ++ String.fromInt tower.totalDamage
     in
     div []
         ([ div []
@@ -1139,7 +1128,7 @@ viewSelectedTowerInfo model tower towerId =
                         [ text (getTowerData upgrade).name ]
                 )
                 upgrades
-            ++ [ div [] [ text towerInfoString ] ]
+            ++ [ div [] [ text ("Total damage: " ++ String.fromInt tower.totalDamage) ] ]
             ++ [ div []
                     [ text
                         ("Attack rate: "
@@ -1192,24 +1181,22 @@ viewLeftSide model =
                                 viewSelectedTowerInfo model tower towerId
 
                             Nothing ->
-                                text "Nothing selected"
+                                text ""
 
                     EnemySelected enemyId ->
                         case List.Extra.find (.id >> (==) enemyId) model.enemies of
                             Just enemy ->
-                                text
-                                    ("Enemy hp: ("
-                                        ++ String.fromInt enemy.hp
-                                        ++ "/"
-                                        ++ String.fromInt enemy.maxHp
-                                        ++ ")"
-                                    )
+                                div []
+                                    [ div [] [ text ("Enemy level: " ++ String.fromInt model.level) ]
+                                    , div [] [ text ("Hp: (" ++ String.fromInt enemy.hp ++ "/" ++ String.fromInt enemy.maxHp ++ ")") ]
+                                    , div [] [ text ("Base speed: " ++ String.fromInt enemy.baseSpeed) ]
+                                    ]
 
                             Nothing ->
-                                text "Nothing selected"
+                                text ""
 
                     NothingSelected ->
-                        text "Nothing selected"
+                        text ""
 
                     StoneSelected int ->
                         div []
@@ -1231,12 +1218,17 @@ viewLeftSide model =
 
                 GameOver ->
                     button [ disabled True ] [ text "Pause" ]
+
+        infoBlock header info =
+            div [ class "info-block" ] [ div [ class "info-block-header" ] [ text header ], info ]
     in
-    div [ class "left-side", onClick OutsideBoardClicked ]
-        [ span [] [ text stateString ]
-        , span [] [ pauseButton ]
-        , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
-        , selection
+    div [ class "left-side" ]
+        [ div [ class "card" ]
+            [ infoBlock "Status" (text stateString)
+            , infoBlock "Fort HP" (text (String.fromInt model.hp ++ "/100"))
+            , infoBlock "Selection" selection
+            , div [] [ pauseButton ]
+            ]
         , viewLevels model.level
         ]
 
@@ -1250,7 +1242,7 @@ viewRightSide model =
         towerTypes towers =
             List.map .towerType towers
     in
-    div [ class "right-side", onClick OutsideBoardClicked ]
+    div [ class "right-side" ]
         [ viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
         ]
 
@@ -1355,7 +1347,7 @@ viewProjectile enemies projectile =
                 ]
 
         Nothing ->
-            div [] []
+            text ""
 
 
 viewEnemy : Selected -> Enemy -> Html GameMsg

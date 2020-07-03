@@ -19,8 +19,19 @@
 
 body {
     margin: 0;
-    background-color: #d0d0d0;
+    color: #161e2e;
+    font-size: 14px;
+    background-color: #f4f5f7;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+.card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 3px 0 rgba(0,0,0,.1), 0 1px 2px 0 rgba(0,0,0,.06);
+    margin-bottom: 24px;
+    width: 100%;
 }
 
 h3 {
@@ -66,17 +77,21 @@ h3 {
     min-width: 345px;
 }
 
-.left-side > * {
-    margin-bottom: 20px;
+.info-block {
+    margin-bottom: 10px;
+}
+
+.info-block-header {
+    margin-bottom: 2px;
+    font-weight: 600;
 }
 
 .selection-info {
-    min-height: 100px;
-
+    min-height: 105px;
 }
 
 .selection-info div {
-    margin-bottom: 4px;
+    line-height: 26px;
 }
 
 .selection-info button {
@@ -230,33 +245,27 @@ h3 {
     z-index: 999;
 }
 
-.tower-list {
-    display: flex;
-    flex-wrap: wrap;
+.tower-list .card {
+    margin-bottom: 12px;
 }
 
 .tower-block {
-    display: flex;
-    border: 2px solid #827f7f;
-    font-size: 13px;
-    width: 100%;
-    margin-bottom: 10px;
-    flex-direction: column;
-}
-
-.tower-block-inner {
+    font-size: 12px;
     display: flex;
     align-items: center;
 }
 
 .special-text {
-    padding: 5px;
+    padding-top: 5px;
 }
 
 .tower-image {
     width: 30px;
     height: 30px;
-    margin: 5px;
+}
+
+.tower-info {
+    flex: 1;
 }
 
 .tower-info td {
@@ -264,20 +273,27 @@ h3 {
 }
 
 .tower-info th {
+    font-weight: 600;
     padding: 0 4px;
 }
 
 .have-temporarily {
-    border: 2px solid #ffb100;
+    box-shadow: 0 0 0 2px #ffb100;
 }
 
 .have {
-    border: 2px solid #28a745;
+    box-shadow: 0 0 0 2px #28a745;
 }
 
 .tower-images {
+    padding-top: 5px;
     display: flex;
     justify-content: center;
+}
+
+.tower-images .tower-image {
+    border-radius: 4px;
+    margin: 0 8px;
 }
 
 .tower-image.have {
@@ -302,14 +318,6 @@ h3 {
     background-color: green;
 }
 
-.levels-table {
-    font-size: 14px;
-    width: 100%;
-}
-
-.levels-table th, .levels-table td {
-    text-align: left;
-}
 
 .game-over-overlay {
     position: absolute;
@@ -328,15 +336,35 @@ h3 {
     font-size: 70px;
 }
 
-.level-description {
-    border-bottom: 1px solid black;
-    padding-bottom: 6px;
+.levels-card {
+    padding: 0;
 }
 
-.level-row td {
-    padding-top: 6px;
+.levels-card h3 {
+    padding: 12px;
+    margin: 0;
+}
+
+.levels-table {
+    border-spacing: 0;
+    font-size: 12px;
+    width: 100%;
+    text-align: left;
+}
+
+.levels-table th {
+    padding: 8px 14px;
+}
+
+.level-row  td {
+    border-top: 2px solid #e5e7eb;
+    padding: 8px 14px;
+}
+
+.level-description {
+    padding: 0 14px 8px;
 }
 
 .current-level {
-    color: blue;
+    background-color: #A0AEC0;
 }
