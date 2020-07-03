@@ -2,7 +2,7 @@ module Levels exposing (LevelInfo, getLevelInfo, viewLevels)
 
 import Dict
 import Html exposing (Html, div, h3, table, tbody, td, text, th, tr)
-import Html.Attributes exposing (class, colspan)
+import Html.Attributes exposing (class, classList, colspan)
 
 
 type alias LevelInfo =
@@ -75,8 +75,8 @@ getLevelInfo level =
             }
 
 
-viewLevel : Int -> Html msg
-viewLevel level =
+viewLevel : Int -> Int -> Html msg
+viewLevel currentLevel level =
     let
         levelInfo =
             getLevelInfo level
@@ -124,7 +124,7 @@ viewLevel level =
                 |> String.join ", "
     in
     tbody []
-        [ tr [ class "level-row" ]
+        [ tr [ class "level-row", classList [ ( "current-level", currentLevel == level ) ] ]
             [ td [] [ text (String.fromInt level) ]
             , td [] [ text (String.fromInt levelInfo.hp) ]
             , td [] [ text (String.fromInt levelInfo.damage) ]
@@ -134,8 +134,8 @@ viewLevel level =
         ]
 
 
-viewLevels : Html msg
-viewLevels =
+viewLevels : Int -> Html msg
+viewLevels currentLevel =
     div []
         [ h3 [] [ text "Levels" ]
         , table [ class "levels-table" ]
@@ -146,6 +146,6 @@ viewLevels =
                 , th [] [ text "Tower chances" ]
                 ]
              ]
-                ++ List.map viewLevel (List.range 1 30)
+                ++ List.map (viewLevel currentLevel) (List.range 1 35)
             )
         ]

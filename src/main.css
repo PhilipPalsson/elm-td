@@ -336,3 +336,7 @@ h3 {
 .level-row td {
     padding-top: 6px;
 }
+
+.current-level {
+    color: blue;
+}

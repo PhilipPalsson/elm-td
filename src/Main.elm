@@ -1237,7 +1237,7 @@ viewLeftSide model =
         , span [] [ pauseButton ]
         , span [] [ text ("Fort Hp: (" ++ String.fromInt model.hp ++ "/100)") ]
         , selection
-        , viewLevels
+        , viewLevels model.level
         ]
 
 
