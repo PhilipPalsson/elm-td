@@ -71,7 +71,12 @@ h3 {
 }
 
 .selection-info {
-    min-height: 22px;
+    min-height: 100px;
+
+}
+
+.selection-info div {
+    margin-bottom: 4px;
 }
 
 .selection-info button {
@@ -201,6 +206,12 @@ h3 {
     z-index: 1000;
 }
 
+.miss-text {
+    position: absolute;
+    font-size: 12px;
+    opacity: 0.5;
+}
+
 .stone {
     height: 100%;
     width: 100%;
@@ -229,7 +240,7 @@ h3 {
     border: 2px solid #827f7f;
     font-size: 13px;
     width: 100%;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
     flex-direction: column;
 }
 

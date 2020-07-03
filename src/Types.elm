@@ -23,7 +23,7 @@ import Json.Decode as Decode
 import Json.Decode.Extra as Decode
 import Json.Encode as Encode
 import Random exposing (Seed)
-import Tower exposing (Tower, TowerId, TowerType, towerTypeFromString, towerTypeString)
+import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, towerTypeFromString, towerTypeString)
 
 
 type GameState
@@ -41,7 +41,7 @@ type Selected
 
 
 type alias Projectile =
-    { enemyId : EnemyId, from : Position, ttl : Int, color : String }
+    { enemyId : EnemyId, from : Position, ttl : Int, color : String, miss : Bool }
 
 
 type alias Projectiles =
@@ -102,9 +102,15 @@ type alias Enemy =
     , maxHp : Int
     , damage : Int
     , spawnTime : Int
+    , evasion : Int
     , flying : Bool
     , boss : Bool
+    , effects : List EnemyEffect
     }
+
+
+type alias EnemyEffect =
+    { duration : Int, effectType : TowerEffect }
 
 
 type alias Board =
@@ -183,6 +189,14 @@ positionEncoder position =
         ]
 
 
+enemyEffectEncoder : EnemyEffect -> Encode.Value
+enemyEffectEncoder effect =
+    Encode.object
+        [ ( "duration", Encode.int effect.duration )
+        , ( "effectType", towerEffectsEncoder effect.effectType )
+        ]
+
+
 enemyEncoder : Enemy -> Encode.Value
 enemyEncoder enemy =
     Encode.object
@@ -193,8 +207,10 @@ enemyEncoder enemy =
         , ( "maxHp", Encode.int enemy.maxHp )
         , ( "damage", Encode.int enemy.damage )
         , ( "spawnTime", Encode.int enemy.spawnTime )
+        , ( "evasion", Encode.int enemy.evasion )
         , ( "flying", Encode.bool enemy.flying )
         , ( "boss", Encode.bool enemy.boss )
+        , ( "effects", Encode.list enemyEffectEncoder enemy.effects )
         ]
 
 
@@ -249,19 +265,37 @@ towerTypeEncoder towerType =
     Encode.string (towerTypeString towerType)
 
 
+towerEffectsEncoder : TowerEffect -> Encode.Value
+towerEffectsEncoder towerEffect =
+    Encode.string
+        (case towerEffect of
+            SlowEffect effect ->
+                "Slow" ++ String.fromInt effect
+
+            SpeedAura effect ->
+                "Speed" ++ String.fromInt effect
+
+            FlyingDamage extra ->
+                "Flying" ++ String.fromFloat extra
+
+            TrueStrike ->
+                "TrueStrike"
+        )
+
+
 towerEncoder : Tower -> Encode.Value
 towerEncoder tower =
     Encode.object
         [ ( "damage", Encode.int tower.damage )
-        , ( "flyingDamage", Encode.float tower.flyingDamage )
         , ( "totalDamage", Encode.int tower.totalDamage )
         , ( "range", Encode.int tower.range )
         , ( "cellIndex", Encode.int tower.cellIndex )
         , ( "cooldown", Encode.int tower.cooldown )
-        , ( "currentCooldown", Encode.int tower.currentCooldown )
+        , ( "rate", Encode.int tower.rate )
         , ( "targets", Encode.int tower.targets )
         , ( "temporary", Encode.bool tower.temporary )
         , ( "towerType", towerTypeEncoder tower.towerType )
+        , ( "effects", Encode.list towerEffectsEncoder tower.effects )
         ]
 
 
@@ -272,6 +306,7 @@ projectileEncoder projectile =
         , ( "from", positionEncoder projectile.from )
         , ( "ttl", Encode.int projectile.ttl )
         , ( "color", Encode.string projectile.color )
+        , ( "miss", Encode.bool projectile.miss )
         ]
 
 
@@ -356,6 +391,13 @@ positionDecoder =
         |> Decode.andMap (Decode.field "y" Decode.int)
 
 
+effectsDecoder : Decode.Decoder EnemyEffect
+effectsDecoder =
+    Decode.succeed EnemyEffect
+        |> Decode.andMap (Decode.field "duration" Decode.int)
+        |> Decode.andMap (Decode.field "effectType" towerEffectDecoder)
+
+
 enemyDecoder : Decode.Decoder Enemy
 enemyDecoder =
     Decode.succeed Enemy
@@ -366,8 +408,10 @@ enemyDecoder =
         |> Decode.andMap (Decode.field "maxHp" Decode.int)
         |> Decode.andMap (Decode.field "damage" Decode.int)
         |> Decode.andMap (Decode.field "spawnTime" Decode.int)
+        |> Decode.andMap (Decode.field "evasion" Decode.int)
         |> Decode.andMap (Decode.field "flying" Decode.bool)
         |> Decode.andMap (Decode.field "boss" Decode.bool)
+        |> Decode.andMap (Decode.field "effects" (Decode.list effectsDecoder))
 
 
 gameStateDecoder : Decode.Decoder GameState
@@ -420,19 +464,62 @@ towerTypeDecoder =
     Decode.map towerTypeFromString Decode.string
 
 
+towerEffectDecoder : Decode.Decoder TowerEffect
+towerEffectDecoder =
+    Decode.andThen
+        (\effectString ->
+            if String.startsWith "Flying" effectString then
+                Decode.succeed
+                    (FlyingDamage
+                        (effectString
+                            |> String.replace "Flying" ""
+                            |> String.toFloat
+                            |> Maybe.withDefault 1
+                        )
+                    )
+
+            else if String.startsWith "Speed" effectString then
+                Decode.succeed
+                    (SpeedAura
+                        (effectString
+                            |> String.replace "Speed" ""
+                            |> String.toInt
+                            |> Maybe.withDefault 1
+                        )
+                    )
+
+            else if String.startsWith "Slow" effectString then
+                Decode.succeed
+                    (SlowEffect
+                        (effectString
+                            |> String.replace "Slow" ""
+                            |> String.toInt
+                            |> Maybe.withDefault 1
+                        )
+                    )
+
+            else if String.startsWith "TrueStrike" effectString then
+                Decode.succeed TrueStrike
+
+            else
+                Decode.fail "Invalid Effect"
+        )
+        Decode.string
+
+
 towerDecoder : Decode.Decoder Tower
 towerDecoder =
     Decode.succeed Tower
         |> Decode.andMap (Decode.field "damage" Decode.int)
-        |> Decode.andMap (Decode.field "flyingDamage" Decode.float)
         |> Decode.andMap (Decode.field "totalDamage" Decode.int)
         |> Decode.andMap (Decode.field "range" Decode.int)
         |> Decode.andMap (Decode.field "cellIndex" Decode.int)
+        |> Decode.andMap (Decode.field "rate" Decode.int)
         |> Decode.andMap (Decode.field "cooldown" Decode.int)
-        |> Decode.andMap (Decode.field "currentCooldown" Decode.int)
         |> Decode.andMap (Decode.field "targets" Decode.int)
         |> Decode.andMap (Decode.field "temporary" Decode.bool)
         |> Decode.andMap (Decode.field "towerType" towerTypeDecoder)
+        |> Decode.andMap (Decode.field "effects" (Decode.list towerEffectDecoder))
 
 
 projectileDecoder : Decode.Decoder Projectile
@@ -442,6 +529,7 @@ projectileDecoder =
         |> Decode.andMap (Decode.field "from" positionDecoder)
         |> Decode.andMap (Decode.field "ttl" Decode.int)
         |> Decode.andMap (Decode.field "color" Decode.string)
+        |> Decode.andMap (Decode.field "miss" Decode.bool)
 
 
 gameModelDecoder : Int -> Decode.Decoder GameModel

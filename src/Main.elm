@@ -4,7 +4,7 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
-import Constants exposing (baseEnemySize, blockedGrassIndices, blockedPathIndices, boardHeight, boardWidth, buildsPerLevel, cellSize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
+import Constants exposing (baseEnemySize, blockedGrassIndices, blockedPathIndices, boardHeight, boardUpscale, boardWidth, buildsPerLevel, cellSize, fps, goalIndex, pathIndicies, postIndices, startIndex, startingStones, stepSize)
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (intToPxString)
@@ -18,7 +18,7 @@ import Ports exposing (saveState)
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
 import Time
-import Tower exposing (Tower, TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
+import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, availableUpgrades, createTower, getTowerType, towerCombination, towerTypeString, towerTypeToCssString, viewTower, viewTowerInformation)
 import Types exposing (Board, Cell, CellIndex, CellObject(..), CellType(..), Enemy, EnemyId, GameModel, GameState(..), Position, Projectile, Projectiles, Selected(..), Towers, gameModelDecoder, gameModelEncoder)
 
 
@@ -98,8 +98,12 @@ init flags =
             }
     in
     ( { gameModel = default
-      , savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
-      , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
+
+      -- TODO uncomment to be able to load save games
+      --, savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
+      --, savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
+      , savedGameModel = Nothing
+      , savedTimestamp = Nothing
       }
     , Cmd.none
     )
@@ -142,28 +146,92 @@ initBoard =
         (Array.fromList (List.range 0 ((boardWidth * boardHeight) - 1)))
 
 
-towerEnemyInteraction : TowerId -> Tower -> ( Towers, List Enemy, Projectiles ) -> ( Towers, List Enemy, Projectiles )
-towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
-    if tower.currentCooldown == 0 then
+addEffects : List TowerEffect -> Enemy -> Enemy
+addEffects towerEffects enemy =
+    let
+        applicableEffects =
+            towerEffects
+                |> List.filterMap
+                    (\effect ->
+                        case effect of
+                            SlowEffect value ->
+                                Just { duration = fps * 3, effectType = SlowEffect value }
+
+                            _ ->
+                                Nothing
+                    )
+    in
+    { enemy | effects = enemy.effects ++ applicableEffects }
+
+
+scaleDownEnemyPosition : Position -> Position
+scaleDownEnemyPosition pos =
+    { x = pos.x // boardUpscale, y = pos.y // boardUpscale }
+
+
+findAttackSpeedAuras : Tower -> Towers -> ( Float, List Int )
+findAttackSpeedAuras tower towers =
+    let
+        towerPosition t =
+            indexToCellCenterPosition t.cellIndex
+
+        towerInRange t =
+            distance
+                (towerPosition t)
+                (towerPosition tower)
+                < toFloat t.range
+
+        speedAuraEffects effect =
+            case effect of
+                SpeedAura value ->
+                    Just value
+
+                _ ->
+                    Nothing
+
+        auras =
+            towers
+                |> Dict.values
+                |> List.filter towerInRange
+                |> List.foldl (\t allEffects -> allEffects ++ t.effects) []
+                |> List.filterMap speedAuraEffects
+                |> Set.fromList
+                |> Set.toList
+                |> List.sort
+    in
+    ( auras
+        |> List.map (\percent -> (toFloat percent / 100) + 1)
+        |> List.product
+    , auras
+    )
+
+
+type alias TowerEnemyInteractionResult =
+    { towers : Towers
+    , enemies : List Enemy
+    , projectiles : Projectiles
+    , seed : Seed
+    }
+
+
+type alias DamageEnemiesResult =
+    { projectiles : Projectiles
+    , seed : Seed
+    , totalDamage : Int
+    }
+
+
+towerEnemyInteraction : TowerId -> Tower -> TowerEnemyInteractionResult -> TowerEnemyInteractionResult
+towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
+    if tower.cooldown == 0 then
         let
-            dealDamage enemy =
-                let
-                    damage =
-                        if enemy.flying then
-                            round (toFloat tower.damage * tower.flyingDamage)
-
-                        else
-                            tower.damage
-                in
-                { enemy | hp = enemy.hp - damage }
-
             towerPosition =
                 indexToCellCenterPosition tower.cellIndex
 
             enemyInRange : Enemy -> Bool
             enemyInRange enemy =
                 distance
-                    enemy.position
+                    (scaleDownEnemyPosition enemy.position)
                     towerPosition
                     < toFloat tower.range
 
@@ -176,55 +244,107 @@ towerEnemyInteraction towerId tower ( towers, enemies, projectiles ) =
             ( targets, outOfTargetCount ) =
                 List.Extra.splitAt tower.targets validTargets
 
-            afterDamage =
-                List.map dealDamage targets
+            flyingDamage =
+                tower.effects
+                    |> List.foldl
+                        (\effect acc ->
+                            case effect of
+                                FlyingDamage value ->
+                                    value
 
-            -- TODO this isn't calculating correctly
+                                _ ->
+                                    acc
+                        )
+                        1
+
+            dealDamage : DamageEnemiesResult -> Enemy -> ( DamageEnemiesResult, Enemy )
+            dealDamage currentResult enemy =
+                let
+                    ( randomValue, nextSeed ) =
+                        Random.step (Random.int 1 100) currentResult.seed
+
+                    hit =
+                        List.member TrueStrike tower.effects || randomValue >= enemy.evasion
+
+                    updatedProjectiles =
+                        currentResult.projectiles
+                            ++ [ { enemyId = enemy.id
+                                 , from = towerPosition
+                                 , ttl = 12
+                                 , color = towerTypeToCssString tower.towerType
+                                 , miss = not hit
+                                 }
+                               ]
+
+                    damage =
+                        if hit then
+                            if enemy.flying then
+                                round <| toFloat tower.damage * flyingDamage
+
+                            else
+                                tower.damage
+
+                        else
+                            0
+                in
+                ( { projectiles = updatedProjectiles
+                  , seed = nextSeed
+                  , totalDamage = currentResult.totalDamage + min damage enemy.hp
+                  }
+                , { enemy | hp = enemy.hp - damage }
+                )
+
+            ( damageEnemiesResult, enemiesAfterDamage ) =
+                List.Extra.mapAccuml
+                    dealDamage
+                    { projectiles = projectiles
+                    , seed = seed
+                    , totalDamage = 0
+                    }
+                    targets
+
+            afterEffects =
+                List.map (addEffects tower.effects) enemiesAfterDamage
+
             towersAfterDealingDamage =
                 Dict.update towerId
-                    (Maybe.map (\t -> { t | totalDamage = t.totalDamage + List.length targets }))
+                    (Maybe.map (\t -> { t | totalDamage = t.totalDamage + damageEnemiesResult.totalDamage }))
                     towers
+
+            ( attackSpeedIncrease, _ ) =
+                findAttackSpeedAuras tower towers
 
             towersAfterAddingCooldown =
                 Dict.update towerId
                     (Maybe.map
                         (\t ->
                             { t
-                                | currentCooldown =
+                                | cooldown =
                                     if List.isEmpty targets then
                                         0
 
                                     else
-                                        t.cooldown
+                                        round ((100 / (toFloat t.rate * attackSpeedIncrease)) * toFloat fps)
                             }
                         )
                     )
                     towersAfterDealingDamage
-
-            newProjectiles =
-                List.map
-                    (\enemy ->
-                        { enemyId = enemy.id
-                        , from = towerPosition
-                        , ttl = fps // 5
-                        , color = towerTypeToCssString tower.towerType
-                        }
-                    )
-                    targets
         in
-        ( towersAfterAddingCooldown
-          -- TODO check if this is the correct order to append the lists so towers don't switch targets
-        , afterDamage ++ outOfTargetCount ++ invalidTargets ++ notSpawned
-        , projectiles ++ newProjectiles
-        )
+        { towers = towersAfterAddingCooldown
+        , enemies = afterEffects ++ outOfTargetCount ++ invalidTargets ++ notSpawned
+        , projectiles = damageEnemiesResult.projectiles
+        , seed = damageEnemiesResult.seed
+        }
 
     else
-        ( Dict.update towerId
-            (Maybe.map (\t -> { t | currentCooldown = t.currentCooldown - 1 }))
-            towers
-        , enemies
-        , projectiles
-        )
+        { towers =
+            Dict.update towerId
+                (Maybe.map (\t -> { t | cooldown = t.cooldown - 1 }))
+                towers
+        , enemies = enemies
+        , projectiles = projectiles
+        , seed = seed
+        }
 
 
 removeCellObject : Cell -> Cell
@@ -288,10 +408,14 @@ updateGame msg model =
                                 |> List.map (\p -> { p | ttl = p.ttl - 1 })
                                 |> List.filter (.ttl >> (<) 0)
 
-                        ( towers, enemies, projectiles ) =
+                        { towers, enemies, projectiles, seed } =
                             Dict.foldl
                                 towerEnemyInteraction
-                                ( model.towers, enemiesMoved, agedProjectiles )
+                                { towers = model.towers
+                                , enemies = enemiesMoved
+                                , projectiles = agedProjectiles
+                                , seed = model.seed
+                                }
                                 model.towers
 
                         hp =
@@ -314,6 +438,7 @@ updateGame msg model =
                         , hp = hp
                         , state = state
                         , level = level
+                        , seed = seed
                     }
 
                 BuildCellClicked cell ->
@@ -485,6 +610,11 @@ moveEnemies enemies =
     )
 
 
+indexToCellPosition : Int -> ( Int, Int )
+indexToCellPosition i =
+    ( modBy boardWidth i, i // boardWidth )
+
+
 availableSteps : Board -> Bool -> AStar.Position -> Set AStar.Position
 availableSteps board flying ( x, y ) =
     let
@@ -571,10 +701,6 @@ availableSteps board flying ( x, y ) =
 
                     Post ->
                         Just cell
-
-        indexToCellPosition : Int -> ( Int, Int )
-        indexToCellPosition i =
-            ( modBy boardWidth i, i // boardWidth )
     in
     [ upLeft, up, upRight, right, downRight, down, downLeft, left ]
         |> List.filterMap identity
@@ -582,29 +708,18 @@ availableSteps board flying ( x, y ) =
         |> Set.fromList
 
 
-findPath : Array Cell -> Bool -> Position -> Position -> List Position
+findPath : Array Cell -> Bool -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
 findPath cells flying from to =
     let
-        positionToCellPosition : Position -> ( Int, Int )
-        positionToCellPosition position =
-            ( position.x // cellSize, position.y // cellSize )
-
-        cellPositionToPosition : ( Int, Int ) -> Position
-        cellPositionToPosition ( x, y ) =
-            { x = (x * cellSize) + (cellSize // 2)
-            , y = (y * cellSize) + (cellSize // 2)
-            }
-
         path =
             AStar.findPath
                 AStar.straightLineCost
                 (availableSteps cells flying)
-                (positionToCellPosition from)
-                (positionToCellPosition to)
+                from
+                to
     in
     path
         |> Maybe.withDefault []
-        |> List.map cellPositionToPosition
 
 
 indexToCellCenterPosition : Int -> Position
@@ -621,23 +736,29 @@ indexToCellCenterPosition index =
     }
 
 
-indexToCellCenterBottomPosition : Int -> Position
-indexToCellCenterBottomPosition index =
+startPosition : Position
+startPosition =
     let
         x =
-            modBy boardWidth index
+            modBy boardWidth startIndex
 
         y =
-            index // boardWidth
+            startIndex // boardWidth
     in
-    { x = (x * cellSize) + (cellSize // 2)
-    , y = (y * cellSize) + cellSize
+    { x = ((x * cellSize) + (cellSize // 2)) * boardUpscale
+    , y = ((y * cellSize) + cellSize) * boardUpscale
     }
 
 
 findFullPath : Board -> Bool -> List Position
 findFullPath board flying =
     let
+        cellPositionToPosition : ( Int, Int ) -> Position
+        cellPositionToPosition ( x, y ) =
+            { x = ((x * cellSize) + (cellSize // 2)) * boardUpscale
+            , y = ((y * cellSize) + (cellSize // 2)) * boardUpscale
+            }
+
         fullPath =
             List.foldl
                 (\to totalPath ->
@@ -656,24 +777,26 @@ findFullPath board flying =
                         Nothing ->
                             []
                 )
-                [ indexToCellCenterPosition startIndex ]
-                (List.map indexToCellCenterPosition postIndices ++ [ indexToCellCenterPosition goalIndex ])
+                [ indexToCellPosition startIndex ]
+                (List.map indexToCellPosition postIndices ++ [ indexToCellPosition goalIndex ])
     in
     -- Remove start position since enemies start there
-    List.tail fullPath |> Maybe.withDefault []
+    List.tail fullPath |> Maybe.withDefault [] |> List.map cellPositionToPosition
 
 
 createEnemy : Board -> EnemyId -> Int -> LevelInfo -> Enemy
 createEnemy board enemyId spawnTime levelInfo =
-    { position = indexToCellCenterBottomPosition startIndex
+    { position = startPosition
     , path = findFullPath board levelInfo.flying
     , id = enemyId
     , hp = levelInfo.hp
     , maxHp = levelInfo.hp
     , damage = levelInfo.damage
     , spawnTime = spawnTime
+    , evasion = levelInfo.evasion
     , flying = levelInfo.flying
     , boss = levelInfo.boss
+    , effects = []
     }
 
 
@@ -822,18 +945,34 @@ moveEnemy ({ position } as enemy) =
         ( deltaX, deltaY ) =
             calculateMovement position toPosition
 
-        nextPosition : Position
-        nextPosition =
+        slowEffect =
+            enemy.effects
+                |> List.map
+                    (\effect ->
+                        case effect.effectType of
+                            SlowEffect value ->
+                                1 - (toFloat value / 100)
+
+                            _ ->
+                                0
+                    )
+                |> Set.fromList
+                -- Remove duplicates since same slow effect don't stack
+                |> Set.toList
+                |> List.product
+
+        speed =
             if deltaX /= 0 && deltaY /= 0 then
-                -- When moving horizontal we need to decrease the distance
-                { x = position.x + round (toFloat deltaX * toFloat stepSize * 0.7)
-                , y = position.y + round (toFloat deltaY * toFloat stepSize * 0.7)
-                }
+                toFloat stepSize * 0.7 * slowEffect
 
             else
-                { x = position.x + (deltaX * stepSize)
-                , y = position.y + (deltaY * stepSize)
-                }
+                toFloat stepSize * slowEffect
+
+        nextPosition : Position
+        nextPosition =
+            { x = position.x + round (toFloat deltaX * speed)
+            , y = position.y + round (toFloat deltaY * speed)
+            }
 
         ( newPosition, path ) =
             if calculateMovement nextPosition toPosition == ( 0, 0 ) then
@@ -842,10 +981,14 @@ moveEnemy ({ position } as enemy) =
 
             else
                 ( nextPosition, enemy.path )
+
+        decreaseEffectDuration effect =
+            { effect | duration = effect.duration - 1 }
     in
     { enemy
         | position = newPosition
         , path = path
+        , effects = enemy.effects |> List.map decreaseEffectDuration |> List.filter (.duration >> (<) 0)
     }
 
 
@@ -897,18 +1040,35 @@ viewSelectedTowerInfo model tower towerId =
 
             else
                 []
-    in
-    div []
-        ([ span [] [ text ("Tower " ++ towerTypeString tower.towerType) ]
-         , if tower.temporary then
-            if model.state == Build 0 then
-                button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
+
+        ( attackSpeedIncrease, auras ) =
+            findAttackSpeedAuras tower model.towers
+
+        speedAuraString =
+            auras
+                |> List.map (\percent -> String.fromInt percent ++ "%")
+                |> String.join ", "
+
+        towerInfoString =
+            if tower.temporary then
+                ""
 
             else
-                text ""
+                "Total damage: " ++ String.fromInt tower.totalDamage
+    in
+    div []
+        ([ div []
+            [ span [] [ text ("Tower " ++ towerTypeString tower.towerType) ]
+            , if tower.temporary then
+                if model.state == Build 0 then
+                    button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
 
-           else
-            button [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ] [ text "Remove" ]
+                else
+                    text ""
+
+              else
+                button [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ] [ text "Remove" ]
+            ]
          ]
             ++ List.map
                 (\upgrade ->
@@ -917,6 +1077,22 @@ viewSelectedTowerInfo model tower towerId =
                         [ text (towerTypeString upgrade) ]
                 )
                 upgrades
+            ++ [ div [] [ text towerInfoString ] ]
+            ++ [ div []
+                    [ text
+                        ("Attack rate: "
+                            ++ String.fromInt (round (toFloat tower.rate * attackSpeedIncrease))
+                        )
+                    ]
+               ]
+            ++ [ div []
+                    [ if String.isEmpty speedAuraString then
+                        text ""
+
+                      else
+                        text ("Attack speed auras: " ++ speedAuraString)
+                    ]
+               ]
         )
 
 
@@ -1067,39 +1243,54 @@ viewProjectile enemies projectile =
     case maybeEnemy of
         Just enemy ->
             let
+                enemyScaledPosition =
+                    scaleDownEnemyPosition enemy.position
+
                 width =
                     distance
                         projectile.from
-                        enemy.position
+                        enemyScaledPosition
                         |> round
                         |> intToPxString
 
                 ( left, top, angle ) =
-                    if projectile.from.x <= enemy.position.x then
+                    if projectile.from.x <= enemyScaledPosition.x then
                         ( projectile.from.x
                         , projectile.from.y
                         , atan2
-                            -(toFloat (projectile.from.x - enemy.position.x))
-                            (toFloat (projectile.from.y - enemy.position.y))
+                            -(toFloat (projectile.from.x - enemyScaledPosition.x))
+                            (toFloat (projectile.from.y - enemyScaledPosition.y))
                         )
 
                     else
-                        ( enemy.position.x
-                        , enemy.position.y
+                        ( enemyScaledPosition.x
+                        , enemyScaledPosition.y
                         , atan2
-                            -(toFloat (enemy.position.x - projectile.from.x))
-                            (toFloat (enemy.position.y - projectile.from.y))
+                            -(toFloat (enemyScaledPosition.x - projectile.from.x))
+                            (toFloat (enemyScaledPosition.y - projectile.from.y))
                         )
             in
-            div
-                [ class "projectile"
-                , style "left" (intToPxString left)
-                , style "top" (intToPxString top)
-                , style "width" width
-                , style "background-color" projectile.color
-                , style "transform" ("rotate(" ++ String.fromFloat (angle - pi / 2) ++ "rad)")
+            div []
+                [ div
+                    [ class "projectile"
+                    , style "left" (intToPxString left)
+                    , style "top" (intToPxString top)
+                    , style "width" width
+                    , style "background-color" projectile.color
+                    , style "transform" ("rotate(" ++ String.fromFloat (angle - pi / 2) ++ "rad)")
+                    ]
+                    []
+                , if projectile.miss then
+                    div
+                        [ class "miss-text"
+                        , style "left" (intToPxString enemyScaledPosition.x)
+                        , style "top" (intToPxString enemyScaledPosition.y)
+                        ]
+                        [ text "Miss" ]
+
+                  else
+                    text ""
                 ]
-                []
 
         Nothing ->
             div [] []
@@ -1140,8 +1331,8 @@ viewEnemy selected enemy =
             ]
         , style "width" (intToPxString enemySize)
         , style "height" (intToPxString enemySize)
-        , style "left" (intToPxString (enemy.position.x - (enemySize // 2)))
-        , style "top" (intToPxString (enemy.position.y - (enemySize // 2)))
+        , style "left" (intToPxString ((enemy.position.x // boardUpscale) - (enemySize // 2)))
+        , style "top" (intToPxString ((enemy.position.y // boardUpscale) - (enemySize // 2)))
         , onClick (EnemyClicked enemy)
         ]
         ([ div [ class "hp-bar" ]

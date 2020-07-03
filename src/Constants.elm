@@ -14,7 +14,7 @@ cellSize =
 
 
 stepSize =
-    1
+    100
 
 
 baseEnemySize =
@@ -136,3 +136,7 @@ buildsPerLevel =
 
 fps =
     60
+
+
+boardUpscale =
+    100

@@ -10,15 +10,15 @@ import Random exposing (Seed)
 
 type alias Tower =
     { damage : Int
-    , flyingDamage : Float
     , totalDamage : Int
     , range : Int
     , cellIndex : Int
+    , rate : Int
     , cooldown : Int
-    , currentCooldown : Int
     , targets : Int
     , temporary : Bool
     , towerType : TowerType
+    , effects : List TowerEffect
     }
 
 
@@ -30,10 +30,11 @@ type Color
     = Green
     | Red
     | Blue
+    | Black
 
 
 colors =
-    [ Red, Green, Blue ]
+    [ Red, Green, Blue, Black ]
 
 
 maxTowerLevel =
@@ -41,18 +42,27 @@ maxTowerLevel =
 
 
 type CombinedTower
-    = Teal
-    | White
+    = White
+    | Teal
     | Purple
     | Orange
-    | BigGreen
+    | Grey
+    | DarkBlue
     | Pink
     | Yellow
+    | Gold
 
 
 type TowerType
     = Base Color Int
     | Combined CombinedTower
+
+
+type TowerEffect
+    = FlyingDamage Float
+    | SpeedAura Int
+    | SlowEffect Int
+    | TrueStrike
 
 
 basicTowers : List TowerType
@@ -64,11 +74,13 @@ combinedTowers : List TowerType
 combinedTowers =
     [ Combined White
     , Combined Teal
-    , Combined Purple
     , Combined Orange
-    , Combined BigGreen
+    , Combined Purple
+    , Combined Grey
+    , Combined DarkBlue
     , Combined Pink
     , Combined Yellow
+    , Combined Gold
     ]
 
 
@@ -84,6 +96,9 @@ colorToCssString color =
         Blue ->
             "blue"
 
+        Black ->
+            "black"
+
 
 colorToString : Color -> String
 colorToString color =
@@ -96,6 +111,9 @@ colorToString color =
 
         Blue ->
             "Blue"
+
+        Black ->
+            "Black"
 
 
 towerTypeToCssString : TowerType -> String
@@ -122,8 +140,14 @@ towerTypeToCssString towerType =
         Combined Teal ->
             "teal"
 
-        Combined BigGreen ->
-            "green"
+        Combined DarkBlue ->
+            "darkblue"
+
+        Combined Grey ->
+            "darkgrey"
+
+        Combined Gold ->
+            "gold"
 
 
 towerTypeString : TowerType -> String
@@ -166,6 +190,15 @@ towerTypeFromString string =
         "Blue 3" ->
             Base Blue 3
 
+        "Black 1" ->
+            Base Black 1
+
+        "Black 2" ->
+            Base Black 2
+
+        "Black 3" ->
+            Base Black 3
+
         "Purple" ->
             Combined Purple
 
@@ -184,8 +217,14 @@ towerTypeFromString string =
         "Teal" ->
             Combined Teal
 
-        "BigGreen" ->
-            Combined BigGreen
+        "DarkBlue" ->
+            Combined DarkBlue
+
+        "Grey" ->
+            Combined Grey
+
+        "Gold" ->
+            Combined Gold
 
         _ ->
             Base Green 1
@@ -254,33 +293,45 @@ combinedTowerTypeString combinedTowerType =
         Teal ->
             "Teal"
 
-        BigGreen ->
-            "Big Green"
+        Grey ->
+            "Grey"
+
+        DarkBlue ->
+            "Dark blue"
+
+        Gold ->
+            "Gold"
 
 
 towerCombination : TowerType -> List TowerType
 towerCombination towerType =
     case towerType of
-        Combined Teal ->
-            [ Base Blue 1, Base Blue 2, Base Green 1 ]
-
         Combined White ->
             [ Base Blue 1, Base Red 1, Base Green 1 ]
 
+        Combined Teal ->
+            [ Base Blue 1, Base Black 1, Base Green 1 ]
+
         Combined Purple ->
-            [ Base Blue 2, Base Blue 3, Base Red 2 ]
+            [ Base Blue 2, Base Black 2, Base Red 2 ]
 
         Combined Orange ->
             [ Base Red 1, Base Red 2, Base Green 2 ]
 
-        Combined BigGreen ->
-            [ Base Green 1, Base Green 2, Base Green 3 ]
+        Combined Grey ->
+            [ Base Black 1, Base Black 2, Combined White ]
+
+        Combined DarkBlue ->
+            [ Base Blue 2, Base Blue 3, Base Black 3 ]
 
         Combined Pink ->
             [ Base Red 3, Combined White, Combined Purple ]
 
         Combined Yellow ->
-            [ Combined White, Combined Orange, Combined BigGreen ]
+            [ Combined White, Combined Orange, Base Green 3 ]
+
+        Combined Gold ->
+            [ Combined Yellow, Base Black 1, Base Black 2 ]
 
         Base _ _ ->
             []
@@ -295,6 +346,22 @@ towerCombinations =
             )
         )
         combinedTowers
+
+
+effectString : TowerEffect -> String
+effectString towerEffect =
+    case towerEffect of
+        SlowEffect effect ->
+            "Slow effect " ++ String.fromInt effect ++ "%"
+
+        SpeedAura effect ->
+            "Speed aura " ++ String.fromInt effect ++ "%"
+
+        FlyingDamage extra ->
+            "Flying damage " ++ String.fromFloat (extra * 100) ++ "%"
+
+        TrueStrike ->
+            "Ignore evasion"
 
 
 viewTowerInformation : List TowerType -> List TowerType -> Html msg
@@ -313,13 +380,13 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                     createTower towerType False 0
 
                 hitsPerSecond =
-                    toFloat fps / toFloat tower.cooldown
+                    toFloat tower.rate / 100
 
-                rate =
-                    round (hitsPerSecond * 100)
+                dps =
+                    hitsPerSecond * toFloat tower.damage
 
-                maxDps =
-                    hitsPerSecond * toFloat tower.damage * toFloat tower.targets
+                totalDps =
+                    dps * toFloat tower.targets
 
                 combinations =
                     towerCombination towerType
@@ -335,29 +402,31 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                             , th [] [ text "Targets" ]
                             , th [] [ text "Range" ]
                             , th [] [ text "Rate" ]
-                            , th [] [ text "Max dps" ]
+                            , th [] [ text "Dps" ]
                             ]
                         , tr []
                             [ td [] [ text (String.fromInt tower.damage) ]
                             , td [] [ text (String.fromInt tower.targets) ]
                             , td [] [ text (String.fromInt tower.range) ]
-                            , td [] [ text (String.fromInt rate) ]
-                            , td [] [ text (String.fromInt (round maxDps)) ]
+                            , td [] [ text (String.fromInt tower.rate) ]
+                            , td []
+                                [ text
+                                    (String.fromInt (round dps)
+                                        ++ (if dps /= totalDps then
+                                                "/" ++ String.fromInt (round totalDps)
+
+                                            else
+                                                ""
+                                           )
+                                    )
+                                ]
                             ]
                         ]
                     ]
-                , if tower.flyingDamage > 1 then
-                    div
-                        [ class "special-text" ]
-                        [ text
-                            ("Special: Flying damage "
-                                ++ String.fromFloat (tower.flyingDamage * 100)
-                                ++ "%"
-                            )
-                        ]
-
-                  else
-                    div [] []
+                , div
+                    [ class "special-text" ]
+                    [ text (tower.effects |> List.map effectString |> String.join ", ")
+                    ]
                 , div [ class "tower-images" ]
                     (List.map
                         (\tt ->
@@ -402,66 +471,81 @@ createTower towerType temporary cellIndex =
         values =
             case towerType of
                 Base Red 1 ->
-                    { range = 200, damage = 7, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 80, damage = 6, rate = 100, effects = [ SpeedAura 10 ], targets = 1 }
 
                 Base Red 2 ->
-                    { range = 200, damage = 12, flyingDamage = 1.5, cooldown = fps, targets = 1 }
+                    { range = 80, damage = 12, rate = 100, effects = [ SpeedAura 20 ], targets = 1 }
 
                 Base Red 3 ->
-                    { range = 200, damage = 50, flyingDamage = 2, cooldown = fps, targets = 1 }
+                    { range = 80, damage = 36, rate = 100, effects = [ SpeedAura 30 ], targets = 1 }
 
                 Base Green 1 ->
-                    { range = 80, damage = 12, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 15, rate = 100, effects = [], targets = 1 }
 
                 Base Green 2 ->
-                    { range = 90, damage = 20, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 30, rate = 100, effects = [], targets = 1 }
 
                 Base Green 3 ->
-                    { range = 100, damage = 80, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 90, rate = 100, effects = [], targets = 1 }
 
                 Base Blue 1 ->
-                    { range = 100, damage = 5, flyingDamage = 1, cooldown = fps, targets = 2 }
+                    { range = 125, damage = 10, rate = 100, effects = [ SlowEffect 10 ], targets = 1 }
 
                 Base Blue 2 ->
-                    { range = 100, damage = 8, flyingDamage = 1, cooldown = fps, targets = 3 }
+                    { range = 125, damage = 20, rate = 100, effects = [ SlowEffect 20 ], targets = 1 }
 
                 Base Blue 3 ->
-                    { range = 100, damage = 35, flyingDamage = 1, cooldown = fps, targets = 4 }
+                    { range = 125, damage = 60, rate = 100, effects = [ SlowEffect 30 ], targets = 1 }
 
-                Combined Teal ->
-                    { range = 100, damage = 18, flyingDamage = 1, cooldown = fps, targets = 4 }
+                Base Black 1 ->
+                    { range = 100, damage = 5, rate = 100, effects = [], targets = 2 }
+
+                Base Black 2 ->
+                    { range = 100, damage = 10, rate = 100, effects = [], targets = 3 }
+
+                Base Black 3 ->
+                    { range = 100, damage = 30, rate = 100, effects = [], targets = 4 }
 
                 Combined White ->
-                    { range = 150, damage = 25, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 150, damage = 35, rate = 140, effects = [], targets = 1 }
 
-                Combined Purple ->
-                    { range = 100, damage = 60, flyingDamage = 1, cooldown = fps, targets = 5 }
+                Combined Teal ->
+                    { range = 150, damage = 23, rate = 140, effects = [], targets = 3 }
 
                 Combined Orange ->
-                    { range = 220, damage = 45, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 65, rate = 120, effects = [ SpeedAura 20 ], targets = 1 }
 
-                Combined BigGreen ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 1 }
+                Combined Purple ->
+                    { range = 150, damage = 85, rate = 110, effects = [ TrueStrike ], targets = 1 }
+
+                Combined Grey ->
+                    { range = 150, damage = 50, rate = 100, effects = [ FlyingDamage 1.8 ], targets = 5 }
+
+                Combined DarkBlue ->
+                    { range = 85, damage = 40, rate = 60, effects = [ SlowEffect 75 ], targets = 10 }
 
                 Combined Pink ->
-                    { range = 180, damage = 90, flyingDamage = 1, cooldown = fps, targets = 8 }
+                    { range = 180, damage = 115, rate = 125, effects = [ TrueStrike, SpeedAura 40 ], targets = 1 }
 
                 Combined Yellow ->
-                    { range = 180, damage = 180, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 180, damage = 180, rate = 160, effects = [], targets = 1 }
+
+                Combined Gold ->
+                    { range = 180, damage = 180, rate = 160, effects = [], targets = 4 }
 
                 _ ->
-                    { range = 100, damage = 100, flyingDamage = 1, cooldown = fps, targets = 1 }
+                    { range = 100, damage = 100, rate = 100, effects = [], targets = 1 }
     in
     { damage = values.damage
-    , flyingDamage = values.flyingDamage
     , totalDamage = 0
     , range = values.range
     , cellIndex = cellIndex
-    , cooldown = values.cooldown
-    , currentCooldown = 0
+    , rate = values.rate
+    , cooldown = 0
     , targets = values.targets
     , temporary = temporary
     , towerType = towerType
+    , effects = values.effects
     }
 
 
