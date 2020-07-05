@@ -7,6 +7,7 @@ module Types exposing
     , Enemy
     , EnemyId
     , GameModel
+    , GameMsg(..)
     , GameState(..)
     , Position
     , Projectile
@@ -23,7 +24,22 @@ import Json.Decode as Decode
 import Json.Decode.Extra as Decode
 import Json.Encode as Encode
 import Random exposing (Seed)
-import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType, getTowerData, towerTypeFromString)
+import TowerTypes exposing (Tower, TowerEffect(..), TowerId, TowerType, towerTypeFromString)
+
+
+type GameMsg
+    = Step
+    | CellClicked Cell
+    | TowerClicked TowerId
+    | StoneClicked CellIndex
+    | EnemyClicked Enemy
+    | RemoveTowerButtonClicked TowerId CellIndex
+    | RemoveStoneButtonClicked CellIndex
+    | KeepTowerClicked TowerId
+    | UpgradeTowerClicked TowerId TowerType
+    | PauseButtonClicked
+    | ResumeButtonClicked
+    | GoalClicked
 
 
 type GameState
@@ -268,11 +284,6 @@ selectedEncoder selected =
                 ]
 
 
-towerTypeEncoder : TowerType -> Encode.Value
-towerTypeEncoder towerType =
-    Encode.string (getTowerData towerType).name
-
-
 towerEffectsEncoder : TowerEffect -> Encode.Value
 towerEffectsEncoder towerEffect =
     Encode.string
@@ -304,7 +315,7 @@ towerEncoder tower =
         , ( "rate", Encode.int tower.rate )
         , ( "targets", Encode.int tower.targets )
         , ( "temporary", Encode.bool tower.temporary )
-        , ( "towerType", towerTypeEncoder tower.towerType )
+        , ( "towerType", Encode.string tower.name )
         , ( "effects", Encode.list towerEffectsEncoder tower.effects )
         ]
 

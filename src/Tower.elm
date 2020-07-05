@@ -2,62 +2,15 @@ module Tower exposing (..)
 
 import Array
 import Constants exposing (cellSize)
-import Helper exposing (intToPxString)
-import Html exposing (Html, div, h3, table, td, text, th, tr)
+import Dict
+import Helper exposing (actionButtonsPosition, intToPxString)
+import Html exposing (Html, button, div, h3, table, td, text, th, tr)
 import Html.Attributes exposing (class, style)
-import List.Extra
+import Html.Events exposing (onClick, stopPropagationOn)
+import Json.Decode
 import Random exposing (Seed)
-
-
-type alias Tower =
-    { name : String
-    , color : String
-    , damage : Int
-    , totalDamage : Int
-    , range : Int
-    , cellIndex : Int
-    , rate : Int
-    , cooldown : Int
-    , targets : Int
-    , temporary : Bool
-    , towerType : TowerType
-    , effects : List TowerEffect
-    }
-
-
-type alias TowerId =
-    Int
-
-
-type TowerType
-    = Red1
-    | Red2
-    | Red3
-    | Green1
-    | Green2
-    | Green3
-    | Blue1
-    | Blue2
-    | Blue3
-    | Black1
-    | Black2
-    | Black3
-    | White
-    | Teal
-    | Purple
-    | Orange
-    | Grey
-    | DarkBlue
-    | Pink
-    | Yellow
-    | Gold
-
-
-type TowerEffect
-    = FlyingDamage Float
-    | SpeedAura Int
-    | SlowEffect Int
-    | TrueStrike
+import TowerTypes exposing (Tower, TowerEffect(..), TowerId, TowerType(..))
+import Types exposing (CellIndex, GameMsg(..), GameState(..), Towers)
 
 
 basicTowers : List TowerType
@@ -146,7 +99,7 @@ getTowerData towerType =
             , rate = 100
             , effects = []
             , targets = 1
-            , color = "green"
+            , color = "#19e219"
             , combinations = []
             }
 
@@ -157,7 +110,7 @@ getTowerData towerType =
             , rate = 100
             , effects = []
             , targets = 1
-            , color = "green"
+            , color = "#19e219"
             , combinations = []
             }
 
@@ -168,7 +121,7 @@ getTowerData towerType =
             , rate = 100
             , effects = []
             , targets = 1
-            , color = "green"
+            , color = "#19e219"
             , combinations = []
             }
 
@@ -338,76 +291,6 @@ getTowerData towerType =
             }
 
 
-towerTypeFromString : String -> TowerType
-towerTypeFromString string =
-    case string of
-        "Red 1" ->
-            Red1
-
-        "Red 2" ->
-            Red2
-
-        "Red 3" ->
-            Red3
-
-        "Green 1" ->
-            Green1
-
-        "Green 2" ->
-            Green2
-
-        "Green 3" ->
-            Green3
-
-        "Blue 1" ->
-            Blue1
-
-        "Blue 2" ->
-            Blue2
-
-        "Blue 3" ->
-            Blue3
-
-        "Black 1" ->
-            Black1
-
-        "Black 2" ->
-            Black2
-
-        "Black 3" ->
-            Black3
-
-        "Purple" ->
-            Purple
-
-        "White" ->
-            White
-
-        "Pink" ->
-            Pink
-
-        "Yellow" ->
-            Yellow
-
-        "Orange" ->
-            Orange
-
-        "Teal" ->
-            Teal
-
-        "DarkBlue" ->
-            DarkBlue
-
-        "Grey" ->
-            Grey
-
-        "Gold" ->
-            Gold
-
-        _ ->
-            Green1
-
-
 getTowerType : Seed -> ( Int, Int, Int ) -> ( Seed, TowerType )
 getTowerType seed ( chanceLevel1, chanceLevel2, chanceLevel3 ) =
     let
@@ -463,7 +346,7 @@ effectString towerEffect =
             "Ignore evasion"
 
 
-viewTowerInformation : List TowerType -> List TowerType -> Html msg
+viewTowerInformation : List TowerType -> List TowerType -> Html GameMsg
 viewTowerInformation temporaryTowerTypes existingTowerTypes =
     let
         haveTemporarily towerType =
@@ -472,7 +355,6 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
         have towerType =
             List.member towerType existingTowerTypes
 
-        towerBlock : TowerType -> Html msg
         towerBlock towerType =
             let
                 tower =
@@ -495,8 +377,8 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
             in
             div [ class "card", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
                 [ div [ class "tower-block" ]
-                    [ div [ class "tower-image" ]
-                        [ viewTower False tower
+                    [ div [ class "tower-block-image" ]
+                        [ viewTowerOutsideOfBoard tower
                         ]
                     , table [ class "tower-info" ]
                         [ tr []
@@ -541,11 +423,11 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                         (List.map
                             (\tt ->
                                 div
-                                    [ class "tower-image"
+                                    [ class "tower-block-image"
                                     , class
                                         (towerInfoClass (haveTemporarily tt) (have tt))
                                     ]
-                                    [ viewTower False (createTower tt False 0) ]
+                                    [ viewTowerOutsideOfBoard (createTower tt False 0) ]
                             )
                             combinations
                         )
@@ -596,8 +478,13 @@ createTower towerType temporary cellIndex =
     }
 
 
-viewTower : Bool -> Tower -> Html msg
-viewTower selected tower =
+viewTowerOutsideOfBoard : Tower -> Html GameMsg
+viewTowerOutsideOfBoard tower =
+    viewTower Paused False Dict.empty 0 tower
+
+
+viewTower : GameState -> Bool -> Towers -> TowerId -> Tower -> Html GameMsg
+viewTower state selected towers towerId tower =
     let
         ( barCount, shouldHaveBlock ) =
             case tower.towerType of
@@ -667,7 +554,7 @@ viewTower selected tower =
         bar index =
             div
                 [ class "bar"
-                , style "bottom" (intToPxString ((index * 4) - 1))
+                , style "bottom" (intToPxString ((index * 6) - 2))
                 , style "background-color" tower.color
                 ]
                 []
@@ -689,13 +576,6 @@ viewTower selected tower =
     div
         [ class "tower"
         , class
-            (if selected then
-                "selected"
-
-             else
-                ""
-            )
-        , class
             (if tower.temporary then
                 "temporary"
 
@@ -703,7 +583,7 @@ viewTower selected tower =
                 ""
             )
         ]
-        ([]
+        ([ div [ class "tower-image" ] [] ]
             ++ bars
             ++ [ block ]
             ++ (if selected then
@@ -720,6 +600,40 @@ viewTower selected tower =
                         ]
                         []
                     ]
+                        ++ [ div [ class "action-buttons", actionButtonsPosition tower.cellIndex ]
+                                (case state of
+                                    Build towersLeft ->
+                                        if tower.temporary then
+                                            if towersLeft == 0 then
+                                                [ button
+                                                    [ stopPropagationOn "click"
+                                                        (Json.Decode.succeed ( KeepTowerClicked towerId, True ))
+                                                    ]
+                                                    [ text "Keep" ]
+                                                ]
+
+                                            else
+                                                []
+
+                                        else
+                                            [ button
+                                                [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ]
+                                                [ text "Remove" ]
+                                            ]
+
+                                    Level ->
+                                        List.map
+                                            (\upgrade ->
+                                                button
+                                                    [ onClick (UpgradeTowerClicked towerId upgrade) ]
+                                                    [ text (getTowerData upgrade).name ]
+                                            )
+                                            (availableUpgrades (List.map .towerType (Dict.values towers)) tower.towerType)
+
+                                    _ ->
+                                        []
+                                )
+                           ]
 
                 else
                     []
@@ -733,7 +647,7 @@ availableUpgrades existingTowerType forTower =
         buildable : ( TowerType, List TowerType ) -> Bool
         buildable ( _, components ) =
             List.all (\c -> List.member c existingTowerType) components
-                && List.member forTower existingTowerType
+                && List.member forTower components
     in
     towerCombinations
         |> List.filter buildable

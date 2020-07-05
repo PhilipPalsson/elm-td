@@ -23,12 +23,11 @@ import Constants
         )
 import Dict exposing (Dict)
 import Dict.Extra
-import Helper exposing (intToPxString)
+import Helper exposing (actionButtonsPosition, intToPxString)
 import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes exposing (class, classList, disabled, style)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, stopPropagationOn)
 import Json.Decode
-import Levels exposing (LevelInfo, getLevelInfo, viewLevels)
 import Levels exposing (LevelInfo, getLevelInfo, numberOfLevels, viewLevels)
 import List.Extra
 import Ports exposing (saveState)
@@ -37,17 +36,14 @@ import Set exposing (Set)
 import Time
 import Tower
     exposing
-        ( Tower
-        , TowerEffect(..)
-        , TowerId
-        , TowerType
-        , availableUpgrades
+        ( availableUpgrades
         , createTower
         , getTowerData
         , getTowerType
         , viewTower
         , viewTowerInformation
         )
+import TowerTypes exposing (Tower, TowerEffect(..), TowerId, TowerType)
 import Types
     exposing
         ( Board
@@ -58,6 +54,7 @@ import Types
         , Enemy
         , EnemyId
         , GameModel
+        , GameMsg(..)
         , GameState(..)
         , Position
         , Projectile
@@ -73,21 +70,6 @@ type Msg
     = StartNewGameClicked
     | LoadSavedGameClicked
     | GameMsg GameMsg
-
-
-type GameMsg
-    = Step
-    | BuildCellClicked Cell
-    | TowerClicked TowerId
-    | StoneClicked CellIndex
-    | EnemyClicked Enemy
-    | RemoveTowerButtonClicked TowerId CellIndex
-    | RemoveStoneButtonClicked CellIndex
-    | KeepTowerClicked TowerId
-    | UpgradeTowerClicked TowerId TowerType
-    | PauseButtonClicked
-    | ResumeButtonClicked
-    | GoalClicked
 
 
 type alias Model =
@@ -467,19 +449,19 @@ updateGame msg model =
                         hp =
                             model.hp - enemyDamage
 
-                        ( level, state ) =
+                        ( level, state, selected ) =
                             if hp <= 0 then
-                                ( model.level, GameOver )
+                                ( model.level, GameOver, NothingSelected )
 
                             else if not (List.isEmpty model.enemies) && List.isEmpty enemies then
                                 if numberOfLevels == model.level then
-                                    ( model.level, GameCompleted )
+                                    ( model.level, GameCompleted, NothingSelected )
 
                                 else
-                                    ( model.level + 1, Build buildsPerLevel )
+                                    ( model.level + 1, Build buildsPerLevel, NothingSelected )
 
                             else
-                                ( model.level, model.state )
+                                ( model.level, model.state, model.selected )
                     in
                     { model
                         | enemies = enemies
@@ -489,15 +471,16 @@ updateGame msg model =
                         , state = state
                         , level = level
                         , seed = seed
+                        , selected = selected
                     }
 
-                BuildCellClicked cell ->
+                CellClicked cell ->
                     case model.state of
                         Level ->
                             { model | selected = NothingSelected }
 
                         Build towersLeft ->
-                            if towersLeft > 0 then
+                            if towersLeft > 0 && model.selected == NothingSelected then
                                 addTower cell model towersLeft
 
                             else
@@ -566,7 +549,7 @@ upgradeTower model towerId upgradeTo =
                 Just tower ->
                     let
                         combinations =
-                            (getTowerData tower.towerType).combinations
+                            (getTowerData upgradeTo).combinations
 
                         towersEntriesToReplace =
                             combinations
@@ -595,9 +578,14 @@ upgradeTower model towerId upgradeTo =
                 Nothing ->
                     ( model.board, model.towers )
     in
-    { model | towers = updatedTowers, board = updatedBoard }
+    { model
+        | towers = updatedTowers
+        , board = updatedBoard
+        , selected = NothingSelected
+    }
 
 
+spawnEnemies : GameModel -> List Enemy
 spawnEnemies model =
     let
         levelInfo =
@@ -610,7 +598,7 @@ spawnEnemies model =
         |> List.map
             (\index ->
                 createEnemy
-                    model.board
+                    model
                     (model.enemyIdCount + index)
                     (round (toFloat index * delayBetweenEnemiesFactor))
                     levelInfo
@@ -648,6 +636,7 @@ keepTower towerToKeepId model =
         , state = Level
         , enemies = newEnemies
         , enemyIdCount = model.enemyIdCount + List.length newEnemies
+        , selected = NothingSelected
     }
 
 
@@ -844,10 +833,10 @@ findFullPath board flying =
     List.tail fullPath |> Maybe.withDefault [] |> List.map cellPositionToPosition
 
 
-createEnemy : Board -> EnemyId -> Int -> LevelInfo -> Enemy
-createEnemy board enemyId spawnTime levelInfo =
+createEnemy : GameModel -> EnemyId -> Int -> LevelInfo -> Enemy
+createEnemy model enemyId spawnTime levelInfo =
     { position = startPosition
-    , path = findFullPath board levelInfo.flying
+    , path = findFullPath model.board levelInfo.flying
     , id = enemyId
     , hp = levelInfo.hp
     , maxHp = levelInfo.hp
@@ -1080,7 +1069,7 @@ viewGame gameModel =
         , div [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
             [ viewBoard gameModel ]
         , viewRightSide gameModel
-        , viewGameOverOverlay gameModel
+        , viewGameOverlay gameModel
         ]
 
 
@@ -1122,25 +1111,8 @@ viewSelectedTowerInfo model tower towerId =
     in
     div []
         ([ div []
-            [ span [] [ text ("Tower " ++ tower.name) ]
-            , if tower.temporary then
-                if model.state == Build 0 then
-                    button [ onClick (KeepTowerClicked towerId) ] [ text "Keep" ]
-
-                else
-                    text ""
-
-              else
-                button [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ] [ text "Remove" ]
-            ]
+            [ span [] [ text ("Tower " ++ tower.name) ] ]
          ]
-            ++ List.map
-                (\upgrade ->
-                    button
-                        [ onClick (UpgradeTowerClicked towerId upgrade) ]
-                        [ text (getTowerData upgrade).name ]
-                )
-                upgrades
             ++ [ div [] [ text ("Total damage: " ++ String.fromInt tower.totalDamage) ] ]
             ++ [ div []
                     [ text
@@ -1442,22 +1414,22 @@ viewCellGroup model towers group =
 viewCell : GameModel -> Towers -> Cell -> Html GameMsg
 viewCell model towers cell =
     let
-        ( cellClass, cellObject ) =
+        ( cellClass, cellObject, buildable ) =
             case cell.cellType of
                 Path cellObject_ ->
-                    ( "cell-path", cellObject_ )
+                    ( "cell-path", cellObject_, cellObject_ == NoCellObject )
 
                 Grass cellObject_ ->
-                    ( "cell-grass", cellObject_ )
+                    ( "cell-grass", cellObject_, cellObject_ == NoCellObject )
 
                 Start ->
-                    ( "cell-start", NoCellObject )
+                    ( "cell-start", NoCellObject, False )
 
                 Goal ->
-                    ( "cell-goal", NoCellObject )
+                    ( "cell-goal", NoCellObject, False )
 
                 Post ->
-                    ( "cell-post", NoCellObject )
+                    ( "cell-post", NoCellObject, False )
 
         towerSelected towerId =
             case model.selected of
@@ -1492,13 +1464,13 @@ viewCell model towers cell =
                                 in
                                 case maybeTower of
                                     Just tower ->
-                                        [ viewTower (towerSelected towerId) tower ]
+                                        [ viewTower model.state (towerSelected towerId) model.towers towerId tower ]
 
                                     Nothing ->
                                         []
 
                             Stone ->
-                                [ viewStone stoneSelected ]
+                                [ viewStone model.state stoneSelected cell.index ]
 
                             NoCellObject ->
                                 []
@@ -1506,6 +1478,20 @@ viewCell model towers cell =
                             Blocked ->
                                 []
                        )
+
+        pointer =
+            case cellObject of
+                CellTower _ ->
+                    True
+
+                Stone ->
+                    True
+
+                Blocked ->
+                    False
+
+                NoCellObject ->
+                    False
 
         onClickAttribute =
             case cellObject of
@@ -1516,22 +1502,18 @@ viewCell model towers cell =
                     [ onClick (StoneClicked cell.index) ]
 
                 NoCellObject ->
-                    [ onClick (BuildCellClicked cell) ]
+                    [ onClick (CellClicked cell) ]
 
                 Blocked ->
                     []
 
-        noHoverEffect =
-            cellObject
-                /= NoCellObject
-                || cell.cellType
-                == Start
-                || cell.cellType
-                == Goal
-                || cell.cellType
-                == Post
-                || model.state
-                == Level
+        hoverEffect =
+            case model.state of
+                Build towersLeft ->
+                    buildable && towersLeft > 0
+
+                _ ->
+                    False
     in
     div
         ([ class "cell"
@@ -1539,11 +1521,18 @@ viewCell model towers cell =
          , style "width" (intToPxString cellSize)
          , style "height" (intToPxString cellSize)
          , class
-            (if noHoverEffect then
-                ""
+            (if hoverEffect then
+                "cell-hover"
 
              else
-                "cell-hover"
+                ""
+            )
+         , class
+            (if pointer then
+                "pointer"
+
+             else
+                ""
             )
          ]
             ++ onClickAttribute
@@ -1551,8 +1540,8 @@ viewCell model towers cell =
         content
 
 
-viewStone : Bool -> Html msg
-viewStone selected =
+viewStone : GameState -> Bool -> CellIndex -> Html GameMsg
+viewStone state selected cellIndex =
     div
         [ class "stone" ]
         (if selected then
@@ -1562,6 +1551,17 @@ viewStone selected =
                 , style "height" (intToPxString cellSize)
                 ]
                 []
+            , div [ class "action-buttons", actionButtonsPosition cellIndex ]
+                [ case state of
+                    Build _ ->
+                        button
+                            [ stopPropagationOn "click" (Json.Decode.succeed ( RemoveStoneButtonClicked cellIndex, True ))
+                            ]
+                            [ text "Remove" ]
+
+                    _ ->
+                        text ""
+                ]
             ]
 
          else
