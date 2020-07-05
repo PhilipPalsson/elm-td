@@ -61,7 +61,7 @@ getTowerData towerType =
     case towerType of
         Red1 ->
             { name = "Red 1"
-            , range = 80
+            , range = 100
             , damage = 6
             , rate = 100
             , effects = [ SpeedAura 10 ]
@@ -72,7 +72,7 @@ getTowerData towerType =
 
         Red2 ->
             { name = "Red 2"
-            , range = 80
+            , range = 100
             , damage = 12
             , rate = 100
             , effects = [ SpeedAura 20 ]
@@ -83,7 +83,7 @@ getTowerData towerType =
 
         Red3 ->
             { name = "Red 3"
-            , range = 80
+            , range = 100
             , damage = 36
             , rate = 100
             , effects = [ SpeedAura 30 ]
@@ -94,7 +94,7 @@ getTowerData towerType =
 
         Green1 ->
             { name = "Green 1"
-            , range = 100
+            , range = 110
             , damage = 15
             , rate = 100
             , effects = []
@@ -105,7 +105,7 @@ getTowerData towerType =
 
         Green2 ->
             { name = "Green 2"
-            , range = 100
+            , range = 110
             , damage = 30
             , rate = 100
             , effects = []
@@ -116,7 +116,7 @@ getTowerData towerType =
 
         Green3 ->
             { name = "Green 3"
-            , range = 100
+            , range = 110
             , damage = 90
             , rate = 100
             , effects = []
@@ -127,8 +127,8 @@ getTowerData towerType =
 
         Blue1 ->
             { name = "Blue 1"
-            , range = 125
-            , damage = 10
+            , range = 130
+            , damage = 8
             , rate = 100
             , effects = [ SlowEffect 10 ]
             , targets = 1
@@ -138,8 +138,8 @@ getTowerData towerType =
 
         Blue2 ->
             { name = "Blue 2"
-            , range = 125
-            , damage = 20
+            , range = 130
+            , damage = 16
             , rate = 100
             , effects = [ SlowEffect 20 ]
             , targets = 1
@@ -149,8 +149,8 @@ getTowerData towerType =
 
         Blue3 ->
             { name = "Blue 3"
-            , range = 125
-            , damage = 60
+            , range = 130
+            , damage = 48
             , rate = 100
             , effects = [ SlowEffect 30 ]
             , targets = 1
@@ -160,7 +160,7 @@ getTowerData towerType =
 
         Black1 ->
             { name = "Black 1"
-            , range = 100
+            , range = 110
             , damage = 5
             , rate = 100
             , effects = []
@@ -171,7 +171,7 @@ getTowerData towerType =
 
         Black2 ->
             { name = "Black 2"
-            , range = 100
+            , range = 110
             , damage = 10
             , rate = 100
             , effects = []
@@ -182,7 +182,7 @@ getTowerData towerType =
 
         Black3 ->
             { name = "Black 3"
-            , range = 100
+            , range = 110
             , damage = 30
             , rate = 100
             , effects = []
@@ -193,9 +193,9 @@ getTowerData towerType =
 
         White ->
             { name = "White"
-            , range = 150
-            , damage = 35
-            , rate = 140
+            , range = 125
+            , damage = 32
+            , rate = 130
             , effects = []
             , targets = 1
             , color = "white"
@@ -204,7 +204,7 @@ getTowerData towerType =
 
         Teal ->
             { name = "Teal"
-            , range = 150
+            , range = 125
             , damage = 23
             , rate = 140
             , effects = []
@@ -216,7 +216,7 @@ getTowerData towerType =
         Orange ->
             { name = "Orange"
             , range = 100
-            , damage = 65
+            , damage = 60
             , rate = 120
             , effects = [ SpeedAura 20 ]
             , targets = 1
@@ -226,8 +226,8 @@ getTowerData towerType =
 
         Purple ->
             { name = "Purple"
-            , range = 150
-            , damage = 85
+            , range = 125
+            , damage = 80
             , rate = 110
             , effects = [ TrueStrike ]
             , targets = 1
@@ -237,9 +237,9 @@ getTowerData towerType =
 
         Grey ->
             { name = "Grey"
-            , range = 150
-            , damage = 50
-            , rate = 100
+            , range = 125
+            , damage = 55
+            , rate = 150
             , effects = [ FlyingDamage 1.8 ]
             , targets = 5
             , color = "darkgrey"
@@ -251,7 +251,7 @@ getTowerData towerType =
             , range = 85
             , damage = 40
             , rate = 60
-            , effects = [ SlowEffect 75 ]
+            , effects = [ SlowEffect 50 ]
             , targets = 10
             , color = "darkblue"
             , combinations = [ Blue2, Blue3, Black3 ]
@@ -260,8 +260,8 @@ getTowerData towerType =
         Pink ->
             { name = "Pink"
             , range = 180
-            , damage = 115
-            , rate = 125
+            , damage = 135
+            , rate = 145
             , effects = [ TrueStrike, SpeedAura 40 ]
             , targets = 1
             , color = "pink"
@@ -270,8 +270,8 @@ getTowerData towerType =
 
         Yellow ->
             { name = "Yellow"
-            , range = 180
-            , damage = 180
+            , range = 150
+            , damage = 170
             , rate = 160
             , effects = []
             , targets = 1
@@ -281,7 +281,7 @@ getTowerData towerType =
 
         Gold ->
             { name = "Gold"
-            , range = 180
+            , range = 160
             , damage = 180
             , rate = 160
             , effects = []
