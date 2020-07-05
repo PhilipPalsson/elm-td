@@ -29,6 +29,7 @@ import Html.Attributes exposing (class, classList, disabled, style)
 import Html.Events exposing (onClick)
 import Json.Decode
 import Levels exposing (LevelInfo, getLevelInfo, viewLevels)
+import Levels exposing (LevelInfo, getLevelInfo, numberOfLevels, viewLevels)
 import List.Extra
 import Ports exposing (saveState)
 import Random exposing (Seed, initialSeed)
@@ -471,7 +472,11 @@ updateGame msg model =
                                 ( model.level, GameOver )
 
                             else if not (List.isEmpty model.enemies) && List.isEmpty enemies then
-                                ( model.level + 1, Build buildsPerLevel )
+                                if numberOfLevels == model.level then
+                                    ( model.level, GameCompleted )
+
+                                else
+                                    ( model.level + 1, Build buildsPerLevel )
 
                             else
                                 ( model.level, model.state )
@@ -502,6 +507,9 @@ updateGame msg model =
                             { model | selected = NothingSelected }
 
                         GameOver ->
+                            { model | selected = NothingSelected }
+
+                        GameCompleted ->
                             { model | selected = NothingSelected }
 
                 TowerClicked towerId ->
@@ -1076,12 +1084,17 @@ viewGame gameModel =
         ]
 
 
-viewGameOverOverlay : GameModel -> Html GameMsg
-viewGameOverOverlay model =
+viewGameOverlay : GameModel -> Html GameMsg
+viewGameOverlay model =
     if model.state == GameOver then
-        div [ class "game-over-overlay" ]
+        div [ class "game-overlay" ]
             [ h1 [] [ text "Game over!" ]
             , text ("You reached level " ++ String.fromInt model.level)
+            ]
+
+    else if model.state == GameCompleted then
+        div [ class "game-overlay" ]
+            [ h1 [] [ text "Game completed!" ]
             ]
 
     else
@@ -1172,6 +1185,9 @@ viewLeftSide model =
                 GameOver ->
                     "Game over"
 
+                GameCompleted ->
+                    "Game completed"
+
         selection =
             div [ class "selection-info" ]
                 [ case model.selected of
@@ -1217,6 +1233,9 @@ viewLeftSide model =
                     button [ onClick ResumeButtonClicked ] [ text "Resume" ]
 
                 GameOver ->
+                    button [ disabled True ] [ text "Pause" ]
+
+                GameCompleted ->
                     button [ disabled True ] [ text "Pause" ]
 
         infoBlock header info =

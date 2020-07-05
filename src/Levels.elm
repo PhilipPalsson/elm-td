@@ -1,4 +1,4 @@
-module Levels exposing (LevelInfo, getLevelInfo, viewLevels)
+module Levels exposing (LevelInfo, getLevelInfo, numberOfLevels, viewLevels)
 
 import Dict
 import Html exposing (Html, div, h3, table, tbody, td, text, th, tr)
@@ -16,6 +16,10 @@ type alias LevelInfo =
     , speed : Int
     , magicImmune : Bool
     }
+
+
+numberOfLevels =
+    35
 
 
 levelInfoDict =
@@ -150,6 +154,6 @@ viewLevels currentLevel =
                 , th [] [ text "Tower chances" ]
                 ]
              ]
-                ++ List.map (viewLevel currentLevel) (List.range 1 35)
+                ++ List.map (viewLevel currentLevel) (List.range 1 numberOfLevels)
             )
         ]

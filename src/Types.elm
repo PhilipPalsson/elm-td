@@ -30,6 +30,7 @@ type GameState
     = Level
     | Build Int
     | GameOver
+    | GameCompleted
     | Paused
 
 
@@ -233,6 +234,9 @@ gameStateEncoder gameState =
 
             Paused ->
                 "Paused"
+
+            GameCompleted ->
+                "GameCompleted"
         )
 
 
@@ -431,6 +435,9 @@ gameStateDecoder =
 
             else if stateString == "GameOver" then
                 GameOver
+
+            else if stateString == "GameCompleted" then
+                GameCompleted
 
             else if stateString == "Paused" then
                 Paused

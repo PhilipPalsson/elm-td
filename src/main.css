@@ -319,7 +319,7 @@ h3 {
 }
 
 
-.game-over-overlay {
+.game-overlay {
     position: absolute;
     width: 100vw;
     height: 100vh;
@@ -332,7 +332,7 @@ h3 {
     padding-top: 25px;
 }
 
-.game-over-overlay h1 {
+.game-overlay h1 {
     font-size: 70px;
 }
 
