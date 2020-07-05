@@ -125,6 +125,7 @@ type alias Enemy =
     , effects : List EnemyEffect
     , baseSpeed : Int
     , magicImmune : Bool
+    , dieDelay : Int
     }
 
 
@@ -232,6 +233,7 @@ enemyEncoder enemy =
         , ( "effects", Encode.list enemyEffectEncoder enemy.effects )
         , ( "baseSpeed", Encode.int enemy.baseSpeed )
         , ( "magicImmune", Encode.bool enemy.magicImmune )
+        , ( "dieDelay", Encode.int enemy.dieDelay )
         ]
 
 
@@ -435,6 +437,7 @@ enemyDecoder =
         |> Decode.andMap (Decode.field "effects" (Decode.list effectsDecoder))
         |> Decode.andMap (Decode.field "baseSpeed" Decode.int)
         |> Decode.andMap (Decode.field "magicImmune" Decode.bool)
+        |> Decode.andMap (Decode.field "dieDelay" Decode.int)
 
 
 gameStateDecoder : Decode.Decoder GameState

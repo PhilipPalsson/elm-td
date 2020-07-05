@@ -21,6 +21,10 @@ startIndex =
     27
 
 
+dieDelay =
+    18
+
+
 pathIndicies =
     [ 52
     , 77

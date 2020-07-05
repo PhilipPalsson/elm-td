@@ -14,6 +14,7 @@ import Constants
         , boardWidth
         , buildsPerLevel
         , cellSize
+        , dieDelay
         , fps
         , goalIndex
         , pathIndicies
@@ -319,7 +320,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                   , seed = nextSeed
                   , totalDamage = currentResult.totalDamage + min damage enemy.hp
                   }
-                , { enemy | hp = enemy.hp - damage }
+                , { enemy | hp = max (enemy.hp - damage) 0 }
                 )
 
             ( damageEnemiesResult, enemiesAfterDamage ) =
@@ -426,7 +427,7 @@ updateGame msg model =
                     let
                         aliveEnemies =
                             model.enemies
-                                |> List.filter (.hp >> (<) 0)
+                                |> List.filter (.dieDelay >> (<) 0)
 
                         ( enemyDamage, enemiesMoved ) =
                             moveEnemies aliveEnemies
@@ -655,7 +656,19 @@ moveEnemies enemies =
             otherEnemies ++ notSpawnedEnemies
     in
     ( List.foldl (.damage >> (+)) 0 enemiesReachedGoal
-    , List.map (\e -> { e | spawnTime = max 0 (e.spawnTime - 1) }) enemiesLeft
+    , List.map
+        (\e ->
+            { e
+                | spawnTime = max 0 (e.spawnTime - 1)
+                , dieDelay =
+                    if e.hp == 0 then
+                        e.dieDelay - 1
+
+                    else
+                        e.dieDelay
+            }
+        )
+        enemiesLeft
     )
 
 
@@ -848,6 +861,7 @@ createEnemy model enemyId spawnTime levelInfo =
     , effects = []
     , baseSpeed = levelInfo.speed
     , magicImmune = levelInfo.magicImmune
+    , dieDelay = dieDelay
     }
 
 
@@ -1017,11 +1031,15 @@ moveEnemy ({ position } as enemy) =
                     |> List.product
 
         speed =
-            if deltaX /= 0 && deltaY /= 0 then
-                toFloat enemy.baseSpeed * 0.7 * slowEffect
+            if enemy.hp > 0 then
+                if deltaX /= 0 && deltaY /= 0 then
+                    toFloat enemy.baseSpeed * 0.7 * slowEffect
+
+                else
+                    toFloat enemy.baseSpeed * slowEffect
 
             else
-                toFloat enemy.baseSpeed * slowEffect
+                0
 
         nextPosition : Position
         nextPosition =
@@ -1084,23 +1102,16 @@ viewGameOverlay model =
     else if model.state == GameCompleted then
         div [ class "game-overlay" ]
             [ h1 [] [ text "Game completed!" ]
+            , text ("Your fort survived with " ++ String.fromInt model.hp ++ " hp")
             ]
 
     else
         text ""
 
 
-viewSelectedTowerInfo : GameModel -> Tower -> TowerId -> Html GameMsg
-viewSelectedTowerInfo model tower towerId =
+viewSelectedTowerInfo : GameModel -> Tower -> Html GameMsg
+viewSelectedTowerInfo model tower =
     let
-        upgrades : List TowerType
-        upgrades =
-            if model.state == Level then
-                availableUpgrades (List.map .towerType (Dict.values model.towers)) tower.towerType
-
-            else
-                []
-
         ( attackSpeedIncrease, auras ) =
             findAttackSpeedAuras tower model.towers
 
@@ -1166,7 +1177,7 @@ viewLeftSide model =
                     TowerSelected towerId ->
                         case Dict.get towerId model.towers of
                             Just tower ->
-                                viewSelectedTowerInfo model tower towerId
+                                viewSelectedTowerInfo model tower
 
                             Nothing ->
                                 text ""
@@ -1378,6 +1389,7 @@ viewEnemy selected enemy =
         , style "height" (intToPxString enemySize)
         , style "left" (intToPxString ((enemy.position.x // boardUpscale) - (enemySize // 2)))
         , style "top" (intToPxString ((enemy.position.y // boardUpscale) - (enemySize // 2)))
+        , style "opacity" (String.fromFloat (toFloat enemy.dieDelay / dieDelay))
         , onClick (EnemyClicked enemy)
         ]
         ([ div [ class "hp-bar" ]
