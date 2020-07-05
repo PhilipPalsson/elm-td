@@ -625,7 +625,9 @@ viewTower state selected towers towerId tower =
                                         List.map
                                             (\upgrade ->
                                                 button
-                                                    [ onClick (UpgradeTowerClicked towerId upgrade) ]
+                                                    [ stopPropagationOn "click"
+                                                        (Json.Decode.succeed ( UpgradeTowerClicked towerId upgrade, True ))
+                                                    ]
                                                     [ text (getTowerData upgrade).name ]
                                             )
                                             (availableUpgrades (List.map .towerType (Dict.values towers)) tower.towerType)

@@ -196,6 +196,7 @@ h3 {
     cursor: pointer;
     font-size: 14px;
     opacity: 0.95;
+    white-space: nowrap;
 }
 
 .action-buttons button +  button {

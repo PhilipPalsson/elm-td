@@ -127,8 +127,8 @@ viewLevel currentLevel level =
                 |> List.filterMap identity
                 |> String.join ", "
     in
-    tbody []
-        [ tr [ class "level-row", classList [ ( "current-level", currentLevel == level ) ] ]
+    tbody [ classList [ ( "current-level", currentLevel == level ) ] ]
+        [ tr [ class "level-row" ]
             [ td [] [ text (String.fromInt level) ]
             , td [] [ text (String.fromInt levelInfo.hp) ]
             , td [] [ text (String.fromInt levelInfo.damage) ]

@@ -37,8 +37,7 @@ import Set exposing (Set)
 import Time
 import Tower
     exposing
-        ( availableUpgrades
-        , createTower
+        ( createTower
         , getTowerData
         , getTowerType
         , viewTower
@@ -773,9 +772,19 @@ availableSteps board flying ( x, y ) =
 findPath : Array Cell -> Bool -> ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
 findPath cells flying from to =
     let
+        pathDistance ( x1, y1 ) ( x2, y2 ) =
+            let
+                dx =
+                    toFloat <| abs (x1 - x2)
+
+                dy =
+                    toFloat <| abs (y1 - y2)
+            in
+            sqrt ((dx ^ 2) + (dy ^ 2))
+
         path =
             AStar.findPath
-                AStar.straightLineCost
+                pathDistance
                 (availableSteps cells flying)
                 from
                 to
