@@ -297,7 +297,7 @@ towerEffectsEncoder towerEffect =
                 "Speed" ++ String.fromInt effect
 
             FlyingDamage extra ->
-                "Flying" ++ String.fromFloat extra
+                "Flying" ++ String.fromInt extra
 
             TrueStrike ->
                 "TrueStrike"
@@ -502,7 +502,7 @@ towerEffectDecoder =
                     (FlyingDamage
                         (effectString
                             |> String.replace "Flying" ""
-                            |> String.toFloat
+                            |> String.toInt
                             |> Maybe.withDefault 1
                         )
                     )

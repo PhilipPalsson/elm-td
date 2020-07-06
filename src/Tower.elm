@@ -132,7 +132,7 @@ getTowerData towerType =
             , rate = 100
             , effects = [ SlowEffect 10 ]
             , targets = 1
-            , color = "blue"
+            , color = "#008eff"
             , combinations = []
             }
 
@@ -143,7 +143,7 @@ getTowerData towerType =
             , rate = 100
             , effects = [ SlowEffect 20 ]
             , targets = 1
-            , color = "blue"
+            , color = "#008eff"
             , combinations = []
             }
 
@@ -154,7 +154,7 @@ getTowerData towerType =
             , rate = 100
             , effects = [ SlowEffect 30 ]
             , targets = 1
-            , color = "blue"
+            , color = "#008eff"
             , combinations = []
             }
 
@@ -340,7 +340,7 @@ effectString towerEffect =
             "Speed aura " ++ String.fromInt effect ++ "%"
 
         FlyingDamage extra ->
-            "Flying damage " ++ String.fromFloat (extra * 100) ++ "%"
+            "Flying damage " ++ String.fromInt extra ++ "%"
 
         TrueStrike ->
             "Ignore evasion"
@@ -375,7 +375,7 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
                 specialText =
                     tower.effects |> List.map effectString |> String.join ", "
             in
-            div [ class "card", class (towerInfoClass (haveTemporarily towerType) (have towerType)) ]
+            div [ class "card" ]
                 [ div [ class "tower-block" ]
                     [ div [ class "tower-block-image" ]
                         [ viewTowerOutsideOfBoard tower
@@ -447,7 +447,10 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
 
 towerInfoClass : Bool -> Bool -> String
 towerInfoClass haveTemporarily have =
-    if have then
+    if have && haveTemporarily then
+        "have have-temporarily"
+
+    else if have then
         "have"
 
     else if haveTemporarily then
@@ -572,6 +575,9 @@ viewTower state selected towers towerId tower =
 
             else
                 text ""
+
+        upgrades =
+            availableUpgrades (List.map .towerType (Dict.values towers)) tower.towerType
     in
     div
         [ class "tower"
@@ -583,7 +589,18 @@ viewTower state selected towers towerId tower =
                 ""
             )
         ]
-        ([ div [ class "tower-image" ] [] ]
+        ([ div
+            [ class "tower-image"
+            , class
+                (if tower.temporary || List.isEmpty upgrades || state /= Level then
+                    ""
+
+                 else
+                    "upgradable"
+                )
+            ]
+            []
+         ]
             ++ bars
             ++ [ block ]
             ++ (if selected then
@@ -630,7 +647,7 @@ viewTower state selected towers towerId tower =
                                                     ]
                                                     [ text (getTowerData upgrade).name ]
                                             )
-                                            (availableUpgrades (List.map .towerType (Dict.values towers)) tower.towerType)
+                                            upgrades
 
                                     _ ->
                                         []

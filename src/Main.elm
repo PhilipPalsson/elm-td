@@ -197,7 +197,7 @@ scaleDownEnemyPosition pos =
     { x = pos.x // boardUpscale, y = pos.y // boardUpscale }
 
 
-findAttackSpeedAuras : Tower -> Towers -> ( Float, List Int )
+findAttackSpeedAuras : Tower -> Towers -> ( Int, List Int )
 findAttackSpeedAuras tower towers =
     let
         towerPosition t =
@@ -228,8 +228,9 @@ findAttackSpeedAuras tower towers =
                 |> List.sort
     in
     ( auras
-        |> List.map (\percent -> (toFloat percent / 100) + 1)
-        |> List.product
+        |> List.map (\percent -> (toFloat percent / 100) * toFloat tower.rate)
+        |> List.sum
+        |> round
     , auras
     )
 
@@ -283,7 +284,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                                 _ ->
                                     acc
                         )
-                        1
+                        100
 
             dealDamage : DamageEnemiesResult -> Enemy -> ( DamageEnemiesResult, Enemy )
             dealDamage currentResult enemy =
@@ -307,7 +308,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                     damage =
                         if hit then
                             if enemy.flying then
-                                round <| toFloat tower.damage * flyingDamage
+                                round <| toFloat tower.damage * (toFloat flyingDamage / 100)
 
                             else
                                 tower.damage
@@ -352,7 +353,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                                         0
 
                                     else
-                                        round ((100 / (toFloat t.rate * attackSpeedIncrease)) * toFloat fps)
+                                        round ((100 / toFloat (t.rate + attackSpeedIncrease)) * toFloat fps)
                             }
                         )
                     )
@@ -1005,6 +1006,28 @@ calculateMovement speed from to =
     )
 
 
+slowEffect : Enemy -> Float
+slowEffect enemy =
+    if enemy.magicImmune then
+        1
+
+    else
+        enemy.effects
+            |> List.map
+                (\effect ->
+                    case effect.effectType of
+                        SlowEffect value ->
+                            1 - (toFloat value / 100)
+
+                        _ ->
+                            0
+                )
+            |> Set.fromList
+            -- Remove duplicates since same slow effect don't stack
+            |> Set.toList
+            |> List.product
+
+
 moveEnemy : Enemy -> Enemy
 moveEnemy ({ position } as enemy) =
     let
@@ -1019,33 +1042,13 @@ moveEnemy ({ position } as enemy) =
         ( deltaX, deltaY ) =
             calculateMovement enemy.baseSpeed position toPosition
 
-        slowEffect =
-            if enemy.magicImmune then
-                1
-
-            else
-                enemy.effects
-                    |> List.map
-                        (\effect ->
-                            case effect.effectType of
-                                SlowEffect value ->
-                                    1 - (toFloat value / 100)
-
-                                _ ->
-                                    0
-                        )
-                    |> Set.fromList
-                    -- Remove duplicates since same slow effect don't stack
-                    |> Set.toList
-                    |> List.product
-
         speed =
             if enemy.hp > 0 then
                 if deltaX /= 0 && deltaY /= 0 then
-                    toFloat enemy.baseSpeed * 0.7 * slowEffect
+                    toFloat enemy.baseSpeed * 0.7 * slowEffect enemy
 
                 else
-                    toFloat enemy.baseSpeed * slowEffect
+                    toFloat enemy.baseSpeed * slowEffect enemy
 
             else
                 0
@@ -1137,7 +1140,7 @@ viewSelectedTowerInfo model tower =
             ++ [ div []
                     [ text
                         ("Attack rate: "
-                            ++ String.fromInt (round (toFloat tower.rate * attackSpeedIncrease))
+                            ++ String.fromInt (tower.rate + attackSpeedIncrease)
                         )
                     ]
                ]
@@ -1194,10 +1197,20 @@ viewLeftSide model =
                     EnemySelected enemyId ->
                         case List.Extra.find (.id >> (==) enemyId) model.enemies of
                             Just enemy ->
+                                let
+                                    speed =
+                                        round (toFloat enemy.baseSpeed * slowEffect enemy)
+                                in
                                 div []
                                     [ div [] [ text ("Enemy level: " ++ String.fromInt model.level) ]
                                     , div [] [ text ("Hp: (" ++ String.fromInt enemy.hp ++ "/" ++ String.fromInt enemy.maxHp ++ ")") ]
-                                    , div [] [ text ("Base speed: " ++ String.fromInt enemy.baseSpeed) ]
+                                    , div []
+                                        [ if speed == enemy.baseSpeed then
+                                            text ("Speed: " ++ String.fromInt enemy.baseSpeed)
+
+                                          else
+                                            text ("Speed: (" ++ String.fromInt speed ++ "/" ++ String.fromInt enemy.baseSpeed ++ ")")
+                                        ]
                                     ]
 
                             Nothing ->

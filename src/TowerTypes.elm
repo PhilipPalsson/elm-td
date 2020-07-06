@@ -46,7 +46,7 @@ type TowerType
 
 
 type TowerEffect
-    = FlyingDamage Float
+    = FlyingDamage Int
     | SpeedAura Int
     | SlowEffect Int
     | TrueStrike
