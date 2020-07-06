@@ -276,7 +276,7 @@ getTowerData towerType =
             , effects = []
             , targets = 1
             , color = "yellow"
-            , combinations = [ White, Orange, Green3 ]
+            , combinations = [ Green3, White, Orange ]
             }
 
         Gold ->
@@ -287,7 +287,7 @@ getTowerData towerType =
             , effects = []
             , targets = 4
             , color = "gold"
-            , combinations = [ Yellow, Black1, Black2 ]
+            , combinations = [ Black1, Black2, Yellow ]
             }
 
 
