@@ -356,7 +356,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                     towersAfterDealingDamage
         in
         { towers = towersAfterAddingCooldown
-        , enemies = afterEffects ++ outOfTargetCount ++ invalidTargets ++ notSpawned
+        , enemies = List.sortBy .id (afterEffects ++ outOfTargetCount ++ invalidTargets ++ notSpawned)
         , projectiles = damageEnemiesResult.projectiles
         , seed = damageEnemiesResult.seed
         }
