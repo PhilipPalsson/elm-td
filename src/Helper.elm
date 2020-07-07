@@ -1,4 +1,4 @@
-module Helper exposing (..)
+module Helper exposing (actionButtonsPosition, intToPxString)
 
 import Constants exposing (boardWidth)
 import Html

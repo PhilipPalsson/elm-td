@@ -1,4 +1,4 @@
-module Tower exposing (..)
+module Tower exposing (createTower, getTowerData, getTowerType, viewTower, viewTowerInformation)
 
 import Array
 import Constants exposing (cellSize)

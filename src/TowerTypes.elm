@@ -1,4 +1,10 @@
-module TowerTypes exposing (..)
+module TowerTypes exposing
+    ( Tower
+    , TowerEffect(..)
+    , TowerId
+    , TowerType(..)
+    , towerTypeFromString
+    )
 
 
 type alias Tower =
