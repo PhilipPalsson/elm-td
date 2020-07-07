@@ -590,15 +590,18 @@ spawnEnemies model =
 
         delayBetweenEnemiesFactor =
             (toFloat 100 / toFloat levelInfo.speed) * fps
+
+        path =
+            findFullPath model.board levelInfo.flying
     in
     List.range 0 (levelInfo.enemyCount - 1)
         |> List.map
             (\index ->
                 createEnemy
-                    model
                     (model.enemyIdCount + index)
                     (round (toFloat index * delayBetweenEnemiesFactor))
                     levelInfo
+                    path
             )
 
 
@@ -852,10 +855,10 @@ findFullPath board flying =
     List.tail fullPath |> Maybe.withDefault [] |> List.map cellPositionToPosition
 
 
-createEnemy : GameModel -> EnemyId -> Int -> LevelInfo -> Enemy
-createEnemy model enemyId spawnTime levelInfo =
+createEnemy : EnemyId -> Int -> LevelInfo -> List Position -> Enemy
+createEnemy enemyId spawnTime levelInfo path =
     { position = startPosition
-    , path = findFullPath model.board levelInfo.flying
+    , path = path
     , id = enemyId
     , hp = levelInfo.hp
     , maxHp = levelInfo.hp
