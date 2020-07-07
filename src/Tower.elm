@@ -588,16 +588,16 @@ viewTower state selected towers towerId tower =
              else
                 ""
             )
+        , class
+            (if tower.temporary || List.isEmpty upgrades || state /= Level then
+                ""
+
+             else
+                "upgradable"
+            )
         ]
         ([ div
             [ class "tower-image"
-            , class
-                (if tower.temporary || List.isEmpty upgrades || state /= Level then
-                    ""
-
-                 else
-                    "upgradable"
-                )
             ]
             []
          ]
