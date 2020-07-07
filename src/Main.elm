@@ -126,12 +126,8 @@ init flags =
             }
     in
     ( { gameModel = default
-
-      -- TODO uncomment to be able to load save games
-      --, savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
-      --, savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
-      , savedGameModel = Nothing
-      , savedTimestamp = Nothing
+      , savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
+      , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
       }
     , Cmd.none
     )
