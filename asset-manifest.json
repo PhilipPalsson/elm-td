@@ -1,0 +1,23 @@
+{
+  "main.css": "/elm-td/static/css/main.48b01631.chunk.css",
+  "main.js": "/elm-td/static/js/main.7aa4050e.chunk.js",
+  "main.js.map": "/elm-td/static/js/main.7aa4050e.chunk.js.map",
+  "runtime~main.js": "/elm-td/static/js/runtime~main.ba8e4d3b.js",
+  "runtime~main.js.map": "/elm-td/static/js/runtime~main.ba8e4d3b.js.map",
+  "vendors~main.js": "/elm-td/static/js/vendors~main.b9063112.chunk.js",
+  "vendors~main.js.map": "/elm-td/static/js/vendors~main.b9063112.chunk.js.map",
+  "./service-worker.js": "/elm-td/./service-worker.js",
+  ".DS_Store": "/elm-td/.DS_Store",
+  "favicon.ico": "/elm-td/favicon.ico",
+  "images/.DS_Store": "/elm-td/images/.DS_Store",
+  "images/base_tower.png": "/elm-td/images/base_tower.png",
+  "images/bat.png": "/elm-td/images/bat.png",
+  "images/cave.png": "/elm-td/images/cave.png",
+  "images/fort.png": "/elm-td/images/fort.png",
+  "images/ghost.png": "/elm-td/images/ghost.png",
+  "images/stone.png": "/elm-td/images/stone.png",
+  "index.html": "/elm-td/index.html",
+  "logo.svg": "/elm-td/logo.svg",
+  "manifest.json": "/elm-td/manifest.json",
+  "precache-manifest.29ee16f660a5ce4125a79dd5f4372bcd.js": "/elm-td/precache-manifest.29ee16f660a5ce4125a79dd5f4372bcd.js"
+}
