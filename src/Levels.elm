@@ -36,8 +36,8 @@ levelInfoDict =
         , ( 6, { hp = 120, buildChances = ( 80, 20, 0 ), damage = 2, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
         , ( 7, { hp = 205, buildChances = ( 80, 20, 0 ), damage = 2, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
         , ( 8, { hp = 340, buildChances = ( 80, 20, 0 ), damage = 2, speed = baseSpeed - 35, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
-        , ( 9, { hp = 435, buildChances = ( 80, 20, 0 ), damage = 2, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
-        , ( 10, { hp = 2500, buildChances = ( 80, 20, 0 ), damage = 20, speed = baseSpeed - 35, enemyCount = 1, evasion = 0, magicImmune = False, flying = False, boss = True } )
+        , ( 9, { hp = 420, buildChances = ( 80, 20, 0 ), damage = 2, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
+        , ( 10, { hp = 2900, buildChances = ( 80, 20, 0 ), damage = 20, speed = baseSpeed - 35, enemyCount = 1, evasion = 0, magicImmune = False, flying = False, boss = True } )
         , ( 11, { hp = 600, buildChances = ( 60, 40, 0 ), damage = 5, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = True, flying = False, boss = False } )
         , ( 12, { hp = 580, buildChances = ( 60, 40, 0 ), damage = 5, speed = baseSpeed + 35, enemyCount = 10, evasion = 20, magicImmune = False, flying = False, boss = False } )
         , ( 13, { hp = 970, buildChances = ( 60, 40, 0 ), damage = 5, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
@@ -53,11 +53,11 @@ levelInfoDict =
         , ( 23, { hp = 5700, buildChances = ( 30, 60, 10 ), damage = 8, speed = baseSpeed, enemyCount = 10, evasion = 50, magicImmune = False, flying = False, boss = False } )
         , ( 24, { hp = 7900, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
         , ( 25, { hp = 2100, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed + 35, enemyCount = 10, evasion = 0, magicImmune = True, flying = True, boss = False } )
-        , ( 26, { hp = 9500, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed, enemyCount = 10, evasion = 50, magicImmune = True, flying = False, boss = False } )
+        , ( 26, { hp = 8700, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed, enemyCount = 10, evasion = 50, magicImmune = True, flying = False, boss = False } )
         , ( 27, { hp = 13750, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed - 35, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
         , ( 28, { hp = 17500, buildChances = ( 25, 60, 15 ), damage = 8, speed = baseSpeed, enemyCount = 10, evasion = 0, magicImmune = False, flying = False, boss = False } )
         , ( 29, { hp = 3050, buildChances = ( 25, 60, 15 ), damage = 10, speed = baseSpeed - 35, enemyCount = 10, evasion = 50, magicImmune = False, flying = True, boss = False } )
-        , ( 30, { hp = 100000, buildChances = ( 25, 60, 15 ), damage = 50, speed = baseSpeed, enemyCount = 1, evasion = 0, magicImmune = True, flying = False, boss = True } )
+        , ( 30, { hp = 60000, buildChances = ( 25, 60, 15 ), damage = 40, speed = baseSpeed, enemyCount = 1, evasion = 0, magicImmune = True, flying = False, boss = True } )
         ]
 
 

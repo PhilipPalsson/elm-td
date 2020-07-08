@@ -207,7 +207,7 @@ getTowerData towerType =
             , range = 125
             , damage = 23
             , rate = 120
-            , effects = [ SlowEffect 20 ]
+            , effects = [ SlowEffect 10 ]
             , targets = 3
             , color = "teal"
             , combinations = [ Blue1, Black1, Green1 ]
@@ -282,7 +282,7 @@ getTowerData towerType =
         Gold ->
             { name = "Gold"
             , range = 160
-            , damage = 165
+            , damage = 155
             , rate = 145
             , effects = []
             , targets = 4
