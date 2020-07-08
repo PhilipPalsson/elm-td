@@ -58,31 +58,53 @@ h3 {
     display: flex;
 }
 
+.main-small {
+    display: flex;
+    flex-direction: column;
+}
+
 .game {
     height: 100vh;
     overflow: auto;
-    flex: 1;
+    flex: 1 0;
     display: flex;
     justify-content: center;
 }
 
-.right-side {
+.left-side {
     padding: 10px;
-    flex: 1;
+    flex: 1 0 305px;
     height: 100vh;
     overflow: auto;
-    min-width: 345px;
 }
 
-.left-side {
-    display: flex;
-    flex-direction: column;
+.right-side {
+    padding: 10px;
+    flex: 1 0 325px;
+    height: 100vh;
+    overflow: auto;
+}
+
+.menu-medium {
     padding: 10px;
     flex: 1;
     height: 100vh;
     overflow: auto;
-    min-width: 345px;
 }
+
+.menu-small {
+    display: flex;
+    margin: 16px;
+}
+
+.menu-small > div {
+    flex: 1;
+}
+
+.menu-small > div + div {
+    margin-left: 16px;
+}
+
 
 .info-block {
     margin-bottom: 10px;
@@ -417,7 +439,7 @@ h3 {
 }
 
 .levels-table th {
-    padding: 8px 14px;
+    padding: 8px 8px;
 }
 
 .level-row  td {

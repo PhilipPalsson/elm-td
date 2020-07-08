@@ -438,7 +438,7 @@ viewTowerInformation temporaryTowerTypes existingTowerTypes =
             [ text "Base towers"
             ]
         , div [ class "tower-list" ] (List.map towerBlock basicTowers)
-        , h3 []
+        , h3 [ style "margin-top" "30px" ]
             [ text "Combined towers"
             ]
         , div [ class "tower-list" ] (List.map towerBlock combinedTowers)

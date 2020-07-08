@@ -4,6 +4,7 @@ import AStar
 import Array exposing (Array)
 import Array.Extra
 import Browser
+import Browser.Events
 import Constants
     exposing
         ( baseEnemySize
@@ -69,13 +70,21 @@ import Types
 type Msg
     = StartNewGameClicked
     | LoadSavedGameClicked
+    | GotNewWindowWidth Int
     | GameMsg GameMsg
+
+
+type Screen
+    = Large
+    | Medium
+    | Small
 
 
 type alias Model =
     { gameModel : GameModel
     , savedGameModel : Maybe GameModel
     , savedTimestamp : Maybe String
+    , windowWidth : Int
     }
 
 
@@ -111,6 +120,13 @@ init flags =
                 |> Result.toMaybe
                 |> Maybe.withDefault 1
 
+        windowWidth =
+            Json.Decode.decodeValue
+                (Json.Decode.field "windowWidth" Json.Decode.int)
+                flags
+                |> Result.toMaybe
+                |> Maybe.withDefault 1
+
         default =
             { board = initBoard
             , enemies = []
@@ -128,6 +144,7 @@ init flags =
     ( { gameModel = default
       , savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
       , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
+      , windowWidth = windowWidth
       }
     , Cmd.none
     )
@@ -412,6 +429,9 @@ update msg model =
               }
             , Cmd.none
             )
+
+        GotNewWindowWidth width ->
+            ( { model | windowWidth = width }, Cmd.none )
 
 
 updateGame : GameMsg -> GameModel -> ( GameModel, Cmd GameMsg )
@@ -1081,25 +1101,62 @@ view model =
     case model.savedGameModel of
         Just _ ->
             div [ class "pre-game" ]
-                [ text ("Found save state from " ++ Maybe.withDefault "" model.savedTimestamp)
-                , button [ onClick LoadSavedGameClicked ] [ text "Load save state" ]
+                [ text ("Found saved game " ++ Maybe.withDefault "" model.savedTimestamp)
+                , button [ onClick LoadSavedGameClicked ] [ text "Load saved game" ]
                 , button [ onClick StartNewGameClicked ] [ text "Start new game" ]
                 ]
 
         Nothing ->
-            Html.map GameMsg (viewGame model.gameModel)
+            let
+                screenSize =
+                    if model.windowWidth > 1380 then
+                        Large
+
+                    else if model.windowWidth > 1060 then
+                        Medium
+
+                    else
+                        Small
+            in
+            Html.map GameMsg (viewGame screenSize model.gameModel)
 
 
-viewGame : GameModel -> Html GameMsg
-viewGame gameModel =
-    div
-        [ class "main" ]
-        [ viewLeftSide gameModel
-        , div [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
-            [ viewBoard gameModel ]
-        , viewRightSide gameModel
-        , viewGameOverlay gameModel
-        ]
+viewGame : Screen -> GameModel -> Html GameMsg
+viewGame screenSize gameModel =
+    case screenSize of
+        Large ->
+            div
+                [ class "main" ]
+                [ div [ class "left-side" ] [ viewLeftSide gameModel ]
+                , div
+                    [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
+                    [ viewBoard gameModel ]
+                , div [ class "right-side" ] [ viewRightSide gameModel ]
+                , viewGameOverlay gameModel
+                ]
+
+        Medium ->
+            div
+                [ class "main" ]
+                [ div [ class "menu-medium" ] [ viewLeftSide gameModel, viewRightSide gameModel ]
+                , div
+                    [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
+                    [ viewBoard gameModel ]
+                , viewGameOverlay gameModel
+                ]
+
+        Small ->
+            div
+                [ class "main-small" ]
+                [ div
+                    [ class "game", style "min-width" (intToPxString (cellSize * boardWidth)) ]
+                    [ viewBoard gameModel ]
+                , div [ class "menu-small" ]
+                    [ viewLeftSide gameModel
+                    , viewRightSide gameModel
+                    ]
+                , viewGameOverlay gameModel
+                ]
 
 
 viewGameOverlay : GameModel -> Html GameMsg
@@ -1218,39 +1275,19 @@ viewLeftSide model =
                     NothingSelected ->
                         text ""
 
-                    StoneSelected int ->
+                    StoneSelected _ ->
                         div []
-                            [ text "Stone"
-                            , button [ onClick (RemoveStoneButtonClicked int) ] [ text "Remove" ]
-                            ]
+                            [ text "Stone" ]
                 ]
-
-        pauseButton =
-            case model.state of
-                Level ->
-                    button [ onClick PauseButtonClicked ] [ text "Pause" ]
-
-                Build _ ->
-                    button [ disabled True ] [ text "Pause" ]
-
-                Paused ->
-                    button [ onClick ResumeButtonClicked ] [ text "Resume" ]
-
-                GameOver ->
-                    button [ disabled True ] [ text "Pause" ]
-
-                GameCompleted ->
-                    button [ disabled True ] [ text "Pause" ]
 
         infoBlock header info =
             div [ class "info-block" ] [ div [ class "info-block-header" ] [ text header ], info ]
     in
-    div [ class "left-side" ]
+    div []
         [ div [ class "card" ]
             [ infoBlock "Status" (text stateString)
             , infoBlock "Fort HP" (text (String.fromInt model.hp ++ "/100"))
             , infoBlock "Selection" selection
-            , div [] [ pauseButton ]
             ]
         , viewLevels model.level
         ]
@@ -1265,9 +1302,8 @@ viewRightSide model =
         towerTypes towers =
             List.map .towerType towers
     in
-    div [ class "right-side" ]
-        [ viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
-        ]
+    div []
+        [ viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes) ]
 
 
 groupCells : Array a -> Array (Array a)
@@ -1605,10 +1641,13 @@ viewStone state selected cellIndex =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.gameModel.state == Level then
-        Time.every (1000 / fps) (always (GameMsg Step))
+        Sub.batch
+            [ Time.every (1000 / fps) (always (GameMsg Step))
+            , Browser.Events.onResize (\w _ -> GotNewWindowWidth w)
+            ]
 
     else
-        Sub.none
+        Browser.Events.onResize (\w _ -> GotNewWindowWidth w)
 
 
 main : Program Json.Decode.Value Model Msg
