@@ -32,7 +32,7 @@ import Html.Events exposing (onClick, stopPropagationOn)
 import Json.Decode
 import Levels exposing (LevelInfo, getLevelInfo, numberOfLevels, viewLevels)
 import List.Extra
-import Ports exposing (saveState)
+import Ports exposing (deleteSaveState, saveState)
 import Random exposing (Seed, initialSeed)
 import Set exposing (Set)
 import Time
@@ -551,7 +551,11 @@ updateGame msg model =
     in
     ( newModel
     , if model.state /= newModel.state then
-        saveState (gameModelEncoder newModel)
+        if model.state == GameOver || model.state == GameCompleted then
+            deleteSaveState ()
+
+        else
+            saveState (gameModelEncoder newModel)
 
       else
         Cmd.none

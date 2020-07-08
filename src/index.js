@@ -2,7 +2,7 @@ import './main.css';
 import { Elm } from './Main.elm';
 import * as serviceWorker from './serviceWorker';
 
-localforage.getItem('save', function (err, value) {
+localforage.getItem('saved_game', function (err, value) {
     const app = Elm.Main.init({
         node: document.getElementById('root'),
         flags: {
@@ -13,7 +13,11 @@ localforage.getItem('save', function (err, value) {
     });
 
     app.ports.saveState.subscribe(function(state) {
-        localforage.setItem('save', {gameState: state, timestamp: new Date().toLocaleString()});
+        localforage.setItem('saved_game', {gameState: state, timestamp: new Date().toLocaleString()});
+    });
+
+    app.ports.deleteSaveState.subscribe(function(state) {
+        localforage.removeItem('saved_game');
     });
 });
 
