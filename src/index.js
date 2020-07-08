@@ -3,7 +3,6 @@ import { Elm } from './Main.elm';
 import * as serviceWorker from './serviceWorker';
 
 localforage.getItem('save', function (err, value) {
-    console.log(value);
     const app = Elm.Main.init({
       node: document.getElementById('root'),
       flags: {...value, seed: Math.floor(Math.random() * 10000000)},
