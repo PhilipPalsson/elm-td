@@ -162,16 +162,13 @@ h3 {
 .cave {
     height: 65px;
     width: 65px;
-    background: url(/images/cave.png) center no-repeat;
-    background-size: 100%;
     position: absolute;
     bottom: 0;
 }
+
 .fort {
     height: 105px;
     width: 105px;
-    background: url(/images/fort.png) center no-repeat;
-    background-size: 100%;
     position: absolute;
     bottom: 0;
 }
@@ -189,8 +186,6 @@ h3 {
     align-items: center;
     justify-content: center;
     position: absolute;
-    background: url(/images/ghost.png) center no-repeat;
-    background-size: 100%;
 }
 
 .enemy-flying {
@@ -198,8 +193,6 @@ h3 {
     align-items: center;
     justify-content: center;
     position: absolute;
-    background: url(/images/bat.png) center no-repeat;
-    background-size: 100%;
 }
 
 .action-buttons {
@@ -262,8 +255,6 @@ h3 {
 .tower-image {
     width: 100%;
     height: 100%;
-    background: url(/images/base_tower.png) center no-repeat;
-    background-size: 28px;
 }
 
 .tower.temporary .tower-image,
@@ -310,10 +301,8 @@ h3 {
 }
 
 .stone {
-    height: 100%;
-    width: 100%;
-    background: transparent url(/images/stone.png) center no-repeat;
-    background-size: 70%;
+    height: 70%;
+    width: 70%;
     display: flex;
     align-items: center;
     justify-content: center;

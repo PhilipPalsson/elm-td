@@ -3,7 +3,7 @@ module Tower exposing (createTower, getTowerData, getTowerType, viewTower, viewT
 import Array
 import Constants exposing (cellSize)
 import Dict
-import Helper exposing (actionButtonsPosition, intToPxString)
+import Helper exposing (actionButtonsPosition, imageAttributes, intToPxString)
 import Html exposing (Html, button, div, h3, table, td, text, th, tr)
 import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick, stopPropagationOn)
@@ -597,8 +597,7 @@ viewTower state selected towers towerId tower =
             )
         ]
         ([ div
-            [ class "tower-image"
-            ]
+            ([ class "tower-image" ] ++ imageAttributes "base_tower.png" "26px")
             []
          ]
             ++ bars

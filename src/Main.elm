@@ -25,7 +25,7 @@ import Constants
         )
 import Dict exposing (Dict)
 import Dict.Extra
-import Helper exposing (actionButtonsPosition, intToPxString)
+import Helper exposing (actionButtonsPosition, imageAttributes, intToPxString)
 import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes exposing (class, classList, disabled, style)
 import Html.Events exposing (onClick, stopPropagationOn)
@@ -1442,17 +1442,21 @@ viewEnemy selected enemy =
                     round (baseEnemySize * 2.5)
     in
     div
-        [ classList
-            [ ( "enemy-flying", enemy.flying )
-            , ( "enemy", not enemy.flying )
-            ]
-        , style "width" (intToPxString enemySize)
-        , style "height" (intToPxString enemySize)
-        , style "left" (intToPxString ((enemy.position.x // boardUpscale) - (enemySize // 2)))
-        , style "top" (intToPxString ((enemy.position.y // boardUpscale) - (enemySize // 2)))
-        , style "opacity" (String.fromFloat (toFloat enemy.dieDelay / dieDelay))
-        , onClick (EnemyClicked enemy)
-        ]
+        ([ class "enemy"
+         , style "width" (intToPxString enemySize)
+         , style "height" (intToPxString enemySize)
+         , style "left" (intToPxString ((enemy.position.x // boardUpscale) - (enemySize // 2)))
+         , style "top" (intToPxString ((enemy.position.y // boardUpscale) - (enemySize // 2)))
+         , style "opacity" (String.fromFloat (toFloat enemy.dieDelay / dieDelay))
+         , onClick (EnemyClicked enemy)
+         ]
+            ++ (if enemy.flying then
+                    imageAttributes "bat.png" "100%"
+
+                else
+                    imageAttributes "ghost.png" "100%"
+               )
+        )
         ([ div [ class "hp-bar" ]
             [ div
                 [ class "hp-bar-inner"
@@ -1522,10 +1526,10 @@ viewCell model towers cell =
 
         content =
             if cell.cellType == Goal then
-                [ div [ class "fort" ] [] ]
+                [ div ([ class "fort" ] ++ imageAttributes "fort.png" "100%") [] ]
 
             else if cell.cellType == Start then
-                [ div [ class "cave" ] [] ]
+                [ div ([ class "cave" ] ++ imageAttributes "cave.png" "100%") [] ]
 
             else
                 []
@@ -1616,7 +1620,7 @@ viewCell model towers cell =
 viewStone : GameState -> Bool -> CellIndex -> Html GameMsg
 viewStone state selected cellIndex =
     div
-        [ class "stone" ]
+        ([ class "stone" ] ++ imageAttributes "stone.png" "100%")
         (if selected then
             [ div
                 [ class "selection"
