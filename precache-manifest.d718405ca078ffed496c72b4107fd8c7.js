@@ -36,7 +36,7 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/elm-td/images/stone.png"
   },
   {
-    "revision": "d1d26abc0337ddd3f7ebb2b1c05b695f",
+    "revision": "2e30bde87e0c7ead5d01f64dfa2a8614",
     "url": "/elm-td/index.html"
   },
   {
@@ -48,12 +48,12 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/elm-td/manifest.json"
   },
   {
-    "revision": "178db43359da132968fd",
+    "revision": "37b75ffc69cbc537458f",
     "url": "/elm-td/static/css/main.47f9903f.chunk.css"
   },
   {
-    "revision": "178db43359da132968fd",
-    "url": "/elm-td/static/js/main.178db433.chunk.js"
+    "revision": "37b75ffc69cbc537458f",
+    "url": "/elm-td/static/js/main.37b75ffc.chunk.js"
   },
   {
     "revision": "ba8e4d3bf56958cc72f1",
