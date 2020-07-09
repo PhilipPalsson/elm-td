@@ -26,7 +26,7 @@ import Constants
 import Dict exposing (Dict)
 import Dict.Extra
 import Helper exposing (actionButtonsPosition, imageAttributes, intToPxString)
-import Html exposing (Html, button, div, h1, span, text)
+import Html exposing (Html, button, div, h1, h3, p, span, text)
 import Html.Attributes exposing (class, classList, disabled, style)
 import Html.Events exposing (onClick, stopPropagationOn)
 import Json.Decode
@@ -1307,7 +1307,13 @@ viewRightSide model =
             List.map .towerType towers
     in
     div []
-        [ viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes) ]
+        [ div [ class "card instructions" ]
+            [ h3 [] [ text "Instructions" ]
+            , p [] [ text "Before each level you get to build four towers but you are only able to keep one of them, the rest are becoming stones. Different towers have different strengths and towers can also be combined into more powerful towers." ]
+            , p [] [ text "Enemies will spawn in the cave, walk pass the grey spots and then into the fort. Your mission is to kill them before they reach the fort. You can never block the enemies of completely with towers but you can build a maze so they will have to walk a longer path. " ]
+            ]
+        , viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
+        ]
 
 
 groupCells : Array a -> Array (Array a)
