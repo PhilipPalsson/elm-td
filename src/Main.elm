@@ -1309,7 +1309,7 @@ viewRightSide model =
     div []
         [ div [ class "card instructions" ]
             [ h3 [] [ text "Instructions" ]
-            , p [] [ text "Before each level you get to build four towers but you are only able to keep one of them, the rest are becoming stones. Different towers have different strengths and towers can also be combined into more powerful towers." ]
+            , p [] [ text "Before each level you get to build four random towers but you are only able to keep one of them. Only base towers can be built this way, combined towers are built by combining the 3 tower components needed for that tower." ]
             , p [] [ text "Enemies will spawn in the cave, walk pass the grey spots and then into the fort. Your mission is to kill them before they reach the fort. You can never block the enemies of completely with towers but you can build a maze so they will have to walk a longer path. " ]
             ]
         , viewTowerInformation (towerTypes temporaryTowerTypes) (towerTypes existingTowerTypes)
