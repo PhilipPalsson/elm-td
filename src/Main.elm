@@ -5,6 +5,7 @@ import Array exposing (Array)
 import Array.Extra
 import Browser
 import Browser.Events
+import Cell exposing (Cell, CellObject(..), CellType(..))
 import Constants
     exposing
         ( baseEnemySize
@@ -25,53 +26,82 @@ import Constants
         )
 import Dict exposing (Dict)
 import Dict.Extra
-import Helper exposing (actionButtonsPosition, imageAttributes, intToPxString)
-import Html exposing (Html, button, div, h1, h3, p, span, text)
-import Html.Attributes exposing (class, classList, disabled, style)
+import Enemy exposing (Enemy, EnemyId)
+import GameState exposing (GameState)
+import Html exposing (Html, button, div, h1, h3, h4, p, span, table, td, text, th, tr)
+import Html.Attributes exposing (class, style)
 import Html.Events exposing (onClick, stopPropagationOn)
-import Json.Decode
-import Levels exposing (LevelInfo, getLevelInfo, numberOfLevels, viewLevels)
+import Json.Decode as Decode
+import Levels exposing (LevelInfo)
 import List.Extra
 import Ports exposing (deleteSaveState, saveState)
+import Position exposing (Position)
+import Projectile exposing (Projectile)
 import Random exposing (Seed, initialSeed)
+import Serialize as S exposing (Codec)
 import Set exposing (Set)
 import Time
-import Tower
-    exposing
-        ( createTower
-        , getTowerData
-        , getTowerType
-        , viewTower
-        , viewTowerInformation
-        )
-import TowerTypes exposing (Tower, TowerEffect(..), TowerId, TowerType)
-import Types
-    exposing
-        ( Board
-        , Cell
-        , CellIndex
-        , CellObject(..)
-        , CellType(..)
-        , Enemy
-        , EnemyId
-        , GameModel
-        , GameMsg(..)
-        , GameState(..)
-        , Position
-        , Projectile
-        , Projectiles
-        , Selected(..)
-        , Towers
-        , gameModelDecoder
-        , gameModelEncoder
-        )
+import Tower exposing (Tower, TowerEffect(..), TowerId, TowerType(..))
 
 
 type Msg
     = StartNewGameClicked
-    | LoadSavedGameClicked
+    | LoadSavedGameClicked GameModel
     | GotNewWindowWidth Int
     | GameMsg GameMsg
+
+
+type GameMsg
+    = Step
+    | CellClicked Cell
+    | TowerClicked TowerId
+    | StoneClicked CellIndex
+    | EnemyClicked Enemy
+    | RemoveTowerButtonClicked TowerId CellIndex
+    | RemoveStoneButtonClicked CellIndex
+    | KeepTowerClicked TowerId
+    | UpgradeTowerClicked TowerId TowerType
+    | PauseButtonClicked
+    | ResumeButtonClicked
+    | GoalClicked
+
+
+type Selected
+    = TowerSelected TowerId
+    | EnemySelected EnemyId
+    | StoneSelected CellIndex
+    | NothingSelected
+
+
+type alias Projectiles =
+    List Projectile
+
+
+type alias GameModel =
+    { seed : Seed
+    , board : Board
+    , enemies : List Enemy
+    , enemyIdCount : EnemyId
+    , state : GameState
+    , selected : Selected
+    , towerIdCount : TowerId
+    , towers : Towers
+    , projectiles : Projectiles
+    , hp : Int
+    , level : Int
+    }
+
+
+type alias Towers =
+    Dict TowerId Tower
+
+
+type alias Board =
+    Array Cell
+
+
+type alias CellIndex =
+    Int
 
 
 type Screen
@@ -82,47 +112,38 @@ type Screen
 
 type alias Model =
     { gameModel : GameModel
-    , savedGameModel : Maybe GameModel
-    , savedTimestamp : Maybe String
+    , savedData : Maybe ( GameModel, String )
     , windowWidth : Int
     }
 
 
-init : Json.Decode.Value -> ( Model, Cmd Msg )
+init : Decode.Value -> ( Model, Cmd Msg )
 init flags =
     let
         savedGameModel : Maybe GameModel
         savedGameModel =
-            Json.Decode.decodeValue
-                (Json.Decode.field "gameState" (gameModelDecoder 1))
-                flags
+            Decode.decodeValue (Decode.field "gameState" Decode.string) flags
                 |> Result.toMaybe
-                |> Maybe.andThen
-                    (\m ->
-                        if m.state == GameOver then
-                            Nothing
-
-                        else
-                            Just m
-                    )
+                |> Maybe.andThen (S.decodeFromString (gameModelCodec seed) >> Result.toMaybe)
 
         savedTimestamp : Maybe String
         savedTimestamp =
-            Json.Decode.decodeValue
-                (Json.Decode.field "timestamp" Json.Decode.string)
+            Decode.decodeValue
+                (Decode.field "timestamp" Decode.string)
                 flags
                 |> Result.toMaybe
 
         seed =
-            Json.Decode.decodeValue
-                (Json.Decode.field "seed" Json.Decode.int)
+            Decode.decodeValue
+                (Decode.field "seed" Decode.int)
                 flags
                 |> Result.toMaybe
                 |> Maybe.withDefault 1
+                |> initialSeed
 
         windowWidth =
-            Json.Decode.decodeValue
-                (Json.Decode.field "windowWidth" Json.Decode.int)
+            Decode.decodeValue
+                (Decode.field "windowWidth" Decode.int)
                 flags
                 |> Result.toMaybe
                 |> Maybe.withDefault 1
@@ -131,19 +152,18 @@ init flags =
             { board = initBoard
             , enemies = []
             , enemyIdCount = 0
-            , state = Build buildsPerLevel
+            , state = GameState.Build buildsPerLevel
             , selected = NothingSelected
             , towerIdCount = 0
             , towers = Dict.empty
             , projectiles = []
             , hp = 100
             , level = 1
-            , seed = initialSeed seed
+            , seed = seed
             }
     in
     ( { gameModel = default
-      , savedGameModel = Maybe.map (\m -> { m | seed = initialSeed seed }) savedGameModel
-      , savedTimestamp = Maybe.andThen (always savedTimestamp) savedGameModel
+      , savedData = Maybe.map2 Tuple.pair savedGameModel savedTimestamp
       , windowWidth = windowWidth
       }
     , Cmd.none
@@ -196,13 +216,13 @@ addEffects towerEffects enemy =
                     (\effect ->
                         case effect of
                             SlowEffect value ->
-                                Just { duration = fps * 3, effectType = SlowEffect value }
+                                Just { duration = fps * 3, amount = value }
 
                             _ ->
                                 Nothing
                     )
     in
-    { enemy | effects = enemy.effects ++ applicableEffects }
+    { enemy | slowEffects = enemy.slowEffects ++ applicableEffects }
 
 
 scaleDownEnemyPosition : Position -> Position
@@ -210,17 +230,23 @@ scaleDownEnemyPosition pos =
     { x = pos.x // boardUpscale, y = pos.y // boardUpscale }
 
 
-findAttackSpeedAuras : Tower -> Towers -> ( Int, List Int )
+calculateAttackSpeed : Int -> Set Int -> Float
+calculateAttackSpeed base =
+    Set.foldl (\increase acc -> acc * (1 + (toFloat increase / 100))) (toFloat base)
+
+
+findAttackSpeedAuras : Tower -> Towers -> Set Int
 findAttackSpeedAuras tower towers =
     let
         towerPosition t =
             indexToCellCenterPosition t.cellIndex
 
+        towerInRange : Tower -> Bool
         towerInRange t =
             distance
                 (towerPosition t)
                 (towerPosition tower)
-                < toFloat t.range
+                < toFloat (Tower.getTowerData t.towerType).range
 
         speedAuraEffects effect =
             case effect of
@@ -229,23 +255,17 @@ findAttackSpeedAuras tower towers =
 
                 _ ->
                     Nothing
-
-        auras =
-            towers
-                |> Dict.values
-                |> List.filter towerInRange
-                |> List.foldl (\t allEffects -> allEffects ++ t.effects) []
-                |> List.filterMap speedAuraEffects
-                |> Set.fromList
-                |> Set.toList
-                |> List.sort
     in
-    ( auras
-        |> List.map (\percent -> (toFloat percent / 100) * toFloat tower.rate)
-        |> List.sum
-        |> round
-    , auras
-    )
+    towers
+        |> Dict.values
+        |> List.filter towerInRange
+        |> List.concatMap
+            (.towerType
+                >> Tower.getTowerData
+                >> .effects
+                >> List.filterMap speedAuraEffects
+            )
+        |> Set.fromList
 
 
 type alias TowerEnemyInteractionResult =
@@ -270,12 +290,15 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
             towerPosition =
                 indexToCellCenterPosition tower.cellIndex
 
+            towerData =
+                Tower.getTowerData tower.towerType
+
             enemyInRange : Enemy -> Bool
             enemyInRange enemy =
                 distance
                     (scaleDownEnemyPosition enemy.position)
                     towerPosition
-                    < toFloat tower.range
+                    < toFloat towerData.range
 
             ( spawned, notSpawned ) =
                 List.partition (.spawnTime >> (==) 0) enemies
@@ -284,10 +307,10 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                 List.partition (\e -> enemyInRange e && e.hp > 0) spawned
 
             ( targets, outOfTargetCount ) =
-                List.Extra.splitAt tower.targets validTargets
+                List.Extra.splitAt towerData.maximumTargets validTargets
 
             flyingDamage =
-                tower.effects
+                towerData.effects
                     |> List.foldl
                         (\effect acc ->
                             case effect of
@@ -306,14 +329,14 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                         Random.step (Random.int 1 100) currentResult.seed
 
                     hit =
-                        List.member TrueStrike tower.effects || randomValue >= enemy.evasion
+                        List.member TrueStrike towerData.effects || randomValue >= enemy.evasion
 
                     updatedProjectiles =
                         currentResult.projectiles
                             ++ [ { enemyId = enemy.id
                                  , from = towerPosition
-                                 , ttl = 12
-                                 , color = tower.color
+                                 , timeToLive = 12
+                                 , color = towerData.color
                                  , miss = not hit
                                  }
                                ]
@@ -321,10 +344,10 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                     damage =
                         if hit then
                             if enemy.flying then
-                                round <| toFloat tower.damage * (toFloat flyingDamage / 100)
+                                round <| toFloat towerData.damage * (toFloat flyingDamage / 100)
 
                             else
-                                tower.damage
+                                towerData.damage
 
                         else
                             0
@@ -346,15 +369,16 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                     targets
 
             afterEffects =
-                List.map (addEffects tower.effects) enemiesAfterDamage
+                List.map (addEffects towerData.effects) enemiesAfterDamage
 
+            towersAfterDealingDamage : Dict TowerId Tower
             towersAfterDealingDamage =
                 Dict.update towerId
                     (Maybe.map (\t -> { t | totalDamage = t.totalDamage + damageEnemiesResult.totalDamage }))
                     towers
 
-            ( attackSpeedIncrease, _ ) =
-                findAttackSpeedAuras tower towers
+            attackSpeed =
+                calculateAttackSpeed towerData.attackRate (findAttackSpeedAuras tower towers)
 
             towersAfterAddingCooldown =
                 Dict.update towerId
@@ -366,7 +390,7 @@ towerEnemyInteraction towerId tower { towers, enemies, projectiles, seed } =
                                         0
 
                                     else
-                                        round ((100 / toFloat (t.rate + attackSpeedIncrease)) * toFloat fps)
+                                        round (100 / attackSpeed * toFloat fps)
                             }
                         )
                     )
@@ -419,13 +443,12 @@ update msg model =
             ( { model | gameModel = gameModel }, Cmd.map GameMsg gameCmd )
 
         StartNewGameClicked ->
-            ( { model | savedGameModel = Nothing }, Cmd.none )
+            ( { model | savedData = Nothing }, Cmd.none )
 
-        LoadSavedGameClicked ->
+        LoadSavedGameClicked savedModel ->
             ( { model
-                | gameModel = Maybe.withDefault model.gameModel model.savedGameModel
-                , savedGameModel = Nothing
-                , savedTimestamp = Nothing
+                | gameModel = savedModel
+                , savedData = Nothing
               }
             , Cmd.none
             )
@@ -450,8 +473,8 @@ updateGame msg model =
 
                         agedProjectiles =
                             model.projectiles
-                                |> List.map (\p -> { p | ttl = p.ttl - 1 })
-                                |> List.filter (.ttl >> (<) 0)
+                                |> List.map (\p -> { p | timeToLive = p.timeToLive - 1 })
+                                |> List.filter (.timeToLive >> (<) 0)
 
                         { towers, enemies, projectiles, seed } =
                             Dict.foldl
@@ -468,14 +491,14 @@ updateGame msg model =
 
                         ( level, state, selected ) =
                             if hp <= 0 then
-                                ( model.level, GameOver, NothingSelected )
+                                ( model.level, GameState.GameOver, NothingSelected )
 
                             else if not (List.isEmpty model.enemies) && List.isEmpty enemies then
-                                if numberOfLevels == model.level then
-                                    ( model.level, GameCompleted, NothingSelected )
+                                if Levels.numberOfLevels == model.level then
+                                    ( model.level, GameState.GameCompleted, NothingSelected )
 
                                 else
-                                    ( model.level + 1, Build buildsPerLevel, NothingSelected )
+                                    ( model.level + 1, GameState.Build buildsPerLevel, NothingSelected )
 
                             else
                                 ( model.level, model.state, model.selected )
@@ -493,23 +516,23 @@ updateGame msg model =
 
                 CellClicked cell ->
                     case model.state of
-                        Level ->
+                        GameState.Level ->
                             { model | selected = NothingSelected }
 
-                        Build towersLeft ->
+                        GameState.Build towersLeft ->
                             if towersLeft > 0 && model.selected == NothingSelected then
                                 addTower cell model towersLeft
 
                             else
                                 { model | selected = NothingSelected }
 
-                        Paused ->
+                        GameState.Paused ->
                             { model | selected = NothingSelected }
 
-                        GameOver ->
+                        GameState.GameOver ->
                             { model | selected = NothingSelected }
 
-                        GameCompleted ->
+                        GameState.GameCompleted ->
                             { model | selected = NothingSelected }
 
                 TowerClicked towerId ->
@@ -541,21 +564,21 @@ updateGame msg model =
                     upgradeTower model towerId towerType
 
                 PauseButtonClicked ->
-                    { model | state = Paused }
+                    { model | state = GameState.Paused }
 
                 ResumeButtonClicked ->
-                    { model | state = Level }
+                    { model | state = GameState.Level }
 
                 GoalClicked ->
                     { model | selected = NothingSelected }
     in
     ( newModel
     , if model.state /= newModel.state then
-        if model.state == GameOver || model.state == GameCompleted then
+        if model.state == GameState.GameOver || model.state == GameState.GameCompleted then
             deleteSaveState ()
 
         else
-            saveState (gameModelEncoder newModel)
+            saveState (S.encodeToString (gameModelCodec newModel.seed) newModel)
 
       else
         Cmd.none
@@ -570,7 +593,7 @@ upgradeTower model towerId upgradeTo =
                 Just tower ->
                     let
                         combinations =
-                            (getTowerData upgradeTo).combinations
+                            (Tower.getTowerData upgradeTo).combinations
 
                         towersEntriesToReplace =
                             combinations
@@ -610,15 +633,22 @@ spawnEnemies : GameModel -> List Enemy
 spawnEnemies model =
     let
         levelInfo =
-            getLevelInfo model.level
+            Levels.getLevelInfo model.level
 
         delayBetweenEnemiesFactor =
             (toFloat 100 / toFloat levelInfo.speed) * fps
 
         path =
             findFullPath model.board levelInfo.flying
+
+        enemyCount =
+            if levelInfo.boss then
+                1
+
+            else
+                10
     in
-    List.range 0 (levelInfo.enemyCount - 1)
+    List.range 1 enemyCount
         |> List.map
             (\index ->
                 createEnemy
@@ -627,6 +657,7 @@ spawnEnemies model =
                     levelInfo
                     path
             )
+        |> Debug.log ""
 
 
 keepTower : TowerId -> GameModel -> GameModel
@@ -657,7 +688,7 @@ keepTower towerToKeepId model =
     { model
         | towers = toKeep
         , board = boardWithStones
-        , state = Level
+        , state = GameState.Level
         , enemies = newEnemies
         , enemyIdCount = model.enemyIdCount + List.length newEnemies
         , selected = NothingSelected
@@ -891,7 +922,7 @@ createEnemy enemyId spawnTime levelInfo path =
     , evasion = levelInfo.evasion
     , flying = levelInfo.flying
     , boss = levelInfo.boss
-    , effects = []
+    , slowEffects = []
     , baseSpeed = levelInfo.speed
     , magicImmune = levelInfo.magicImmune
     , dieDelay = dieDelay
@@ -902,7 +933,7 @@ addTower : Cell -> GameModel -> Int -> GameModel
 addTower cell model towersLeft =
     let
         levelInfo =
-            getLevelInfo model.level
+            Levels.getLevelInfo model.level
 
         ( seed, towerType ) =
             getTowerType model.seed levelInfo.buildChances
@@ -937,7 +968,7 @@ addTower cell model towersLeft =
 
         state =
             if success then
-                Build (towersLeft - 1)
+                GameState.Build (towersLeft - 1)
 
             else
                 model.state
@@ -1035,16 +1066,8 @@ slowEffect enemy =
         1
 
     else
-        enemy.effects
-            |> List.map
-                (\effect ->
-                    case effect.effectType of
-                        SlowEffect value ->
-                            1 - (toFloat value / 100)
-
-                        _ ->
-                            0
-                )
+        enemy.slowEffects
+            |> List.map (\effect -> 1 - (toFloat effect.amount / 100))
             |> Set.fromList
             -- Remove duplicates since same slow effect don't stack
             |> Set.toList
@@ -1096,17 +1119,17 @@ moveEnemy ({ position } as enemy) =
     { enemy
         | position = newPosition
         , path = path
-        , effects = enemy.effects |> List.map decreaseEffectDuration |> List.filter (.duration >> (<) 0)
+        , slowEffects = enemy.slowEffects |> List.map decreaseEffectDuration |> List.filter (.duration >> (<) 0)
     }
 
 
 view : Model -> Html Msg
 view model =
-    case model.savedGameModel of
-        Just _ ->
+    case model.savedData of
+        Just ( savedModel, savedTimestamp ) ->
             div [ class "pre-game" ]
-                [ text ("Found saved game " ++ Maybe.withDefault "" model.savedTimestamp)
-                , button [ onClick LoadSavedGameClicked ] [ text "Load saved game" ]
+                [ text ("Found saved game " ++ savedTimestamp)
+                , button [ onClick (LoadSavedGameClicked savedModel) ] [ text "Load saved game" ]
                 , button [ onClick StartNewGameClicked ] [ text "Start new game" ]
                 ]
 
@@ -1165,13 +1188,13 @@ viewGame screenSize gameModel =
 
 viewGameOverlay : GameModel -> Html GameMsg
 viewGameOverlay model =
-    if model.state == GameOver then
+    if model.state == GameState.GameOver then
         div [ class "game-overlay" ]
             [ h1 [] [ text "Game over!" ]
             , text ("You reached level " ++ String.fromInt model.level)
             ]
 
-    else if model.state == GameCompleted then
+    else if model.state == GameState.GameCompleted then
         div [ class "game-overlay" ]
             [ h1 [] [ text "Game completed!" ]
             , text ("Your fort survived with " ++ String.fromInt model.hp ++ " hp")
@@ -1184,23 +1207,40 @@ viewGameOverlay model =
 viewSelectedTowerInfo : GameModel -> Tower -> Html GameMsg
 viewSelectedTowerInfo model tower =
     let
-        ( attackSpeedIncrease, auras ) =
+        auras =
             findAttackSpeedAuras tower model.towers
 
         speedAuraString =
             auras
+                |> Set.toList
+                |> List.sort
                 |> List.map (\percent -> String.fromInt percent ++ "%")
                 |> String.join ", "
+
+        towerData =
+            Tower.getTowerData tower.towerType
+
+        attackSpeed =
+            calculateAttackSpeed towerData.attackRate auras
     in
     div []
         ([ div []
-            [ span [] [ text ("Tower " ++ tower.name) ] ]
+            [ span [] [ text ("Tower " ++ towerData.name) ] ]
          ]
             ++ [ div [] [ text ("Total damage: " ++ String.fromInt tower.totalDamage) ] ]
             ++ [ div []
                     [ text
                         ("Attack rate: "
-                            ++ String.fromInt (tower.rate + attackSpeedIncrease)
+                            ++ (if round attackSpeed == towerData.attackRate then
+                                    String.fromInt towerData.attackRate
+
+                                else
+                                    "("
+                                        ++ String.fromInt towerData.attackRate
+                                        ++ "/"
+                                        ++ String.fromInt (round attackSpeed)
+                                        ++ ")"
+                               )
                         )
                     ]
                ]
@@ -1220,10 +1260,10 @@ viewLeftSide model =
     let
         stateString =
             case model.state of
-                Level ->
+                GameState.Level ->
                     "Level " ++ String.fromInt model.level
 
-                Build towersLeft ->
+                GameState.Build towersLeft ->
                     let
                         towerString =
                             if towersLeft == 0 then
@@ -1234,13 +1274,13 @@ viewLeftSide model =
                     in
                     "Building for level " ++ String.fromInt model.level ++ " (" ++ towerString ++ ")"
 
-                Paused ->
+                GameState.Paused ->
                     "Paused"
 
-                GameOver ->
+                GameState.GameOver ->
                     "Game over"
 
-                GameCompleted ->
+                GameState.GameCompleted ->
                     "Game completed"
 
         selection =
@@ -1293,7 +1333,7 @@ viewLeftSide model =
             , infoBlock "Fort HP" (text (String.fromInt model.hp ++ "/100"))
             , infoBlock "Selection" selection
             ]
-        , viewLevels model.level
+        , Levels.viewLevels model.level
         ]
 
 
@@ -1592,7 +1632,7 @@ viewCell model towers cell =
 
         hoverEffect =
             case model.state of
-                Build towersLeft ->
+                GameState.Build towersLeft ->
                     buildable && towersLeft > 0
 
                 _ ->
@@ -1636,9 +1676,9 @@ viewStone state selected cellIndex =
                 []
             , div [ class "action-buttons", actionButtonsPosition cellIndex ]
                 [ case state of
-                    Build _ ->
+                    GameState.Build _ ->
                         button
-                            [ stopPropagationOn "click" (Json.Decode.succeed ( RemoveStoneButtonClicked cellIndex, True ))
+                            [ stopPropagationOn "click" (Decode.succeed ( RemoveStoneButtonClicked cellIndex, True ))
                             ]
                             [ text "Remove" ]
 
@@ -1652,9 +1692,457 @@ viewStone state selected cellIndex =
         )
 
 
+getTowerType : Seed -> ( Int, Int, Int ) -> ( Seed, TowerType )
+getTowerType seed ( chanceLevel1, chanceLevel2, chanceLevel3 ) =
+    let
+        towerDistributionList =
+            List.repeat (chanceLevel1 // 4) Red1
+                ++ List.repeat (chanceLevel1 // 4) Green1
+                ++ List.repeat (chanceLevel1 // 4) Blue1
+                ++ List.repeat (chanceLevel1 // 4) Black1
+                ++ List.repeat (chanceLevel2 // 4) Red2
+                ++ List.repeat (chanceLevel2 // 4) Green2
+                ++ List.repeat (chanceLevel2 // 4) Blue2
+                ++ List.repeat (chanceLevel2 // 4) Black2
+                ++ List.repeat (chanceLevel3 // 4) Red3
+                ++ List.repeat (chanceLevel3 // 4) Green3
+                ++ List.repeat (chanceLevel3 // 4) Blue3
+                ++ List.repeat (chanceLevel3 // 4) Black3
+
+        ( random, newSeed ) =
+            Random.step (Random.int 0 (List.length towerDistributionList)) seed
+    in
+    ( newSeed
+    , towerDistributionList
+        |> Array.fromList
+        |> Array.get random
+        |> Maybe.withDefault Red1
+    )
+
+
+towerCombinations : List ( TowerType, List TowerType )
+towerCombinations =
+    List.map
+        (\towerType ->
+            ( towerType
+            , (Tower.getTowerData towerType).combinations
+            )
+        )
+        Tower.combinedTowers
+
+
+effectString : TowerEffect -> String
+effectString towerEffect =
+    case towerEffect of
+        SlowEffect effect ->
+            "Slow effect " ++ String.fromInt effect ++ "%"
+
+        SpeedAura effect ->
+            "Attack speed aura " ++ String.fromInt effect ++ "%"
+
+        FlyingDamage extra ->
+            "Flying damage " ++ String.fromInt extra ++ "%"
+
+        TrueStrike ->
+            "Ignore evasion"
+
+
+viewTowerInformation : List TowerType -> List TowerType -> Html GameMsg
+viewTowerInformation temporaryTowerTypes existingTowerTypes =
+    let
+        haveTemporarily towerType =
+            List.member towerType temporaryTowerTypes
+
+        have towerType =
+            List.member towerType existingTowerTypes
+
+        towerBlock towerType =
+            let
+                tower =
+                    createTower towerType False 0
+
+                towerData =
+                    Tower.getTowerData tower.towerType
+
+                hitsPerSecond =
+                    toFloat towerData.attackRate / 100
+
+                dps =
+                    hitsPerSecond * toFloat towerData.damage
+
+                totalDps =
+                    dps * toFloat towerData.maximumTargets
+
+                specialText =
+                    towerData.effects |> List.map effectString |> String.join ", "
+            in
+            div [ class "card" ]
+                [ h4 [] [ text towerData.name ]
+                , div [ class "tower-block" ]
+                    [ div [ class "tower-block-image" ] [ viewTowerOutsideOfBoard tower ]
+                    , table [ class "tower-info" ]
+                        [ tr []
+                            [ th [] [ text "Damage" ]
+                            , th [] [ text "Targets" ]
+                            , th [] [ text "Range" ]
+                            , th [] [ text "Rate" ]
+                            , th [] [ text "Dps" ]
+                            ]
+                        , tr []
+                            [ td [] [ text (String.fromInt towerData.damage) ]
+                            , td [] [ text (String.fromInt towerData.maximumTargets) ]
+                            , td [] [ text (String.fromInt towerData.range) ]
+                            , td [] [ text (String.fromInt towerData.attackRate) ]
+                            , td []
+                                [ text
+                                    (String.fromInt (round dps)
+                                        ++ (if dps /= totalDps then
+                                                "/" ++ String.fromInt (round totalDps)
+
+                                            else
+                                                ""
+                                           )
+                                    )
+                                ]
+                            ]
+                        ]
+                    ]
+                , if String.isEmpty specialText then
+                    text ""
+
+                  else
+                    div
+                        [ class "special-text" ]
+                        [ text specialText
+                        ]
+                , if List.isEmpty towerData.combinations then
+                    text ""
+
+                  else
+                    div [ class "tower-images" ]
+                        (List.map
+                            (\tt ->
+                                div
+                                    [ class "tower-block-image"
+                                    , class
+                                        (towerInfoClass (haveTemporarily tt) (have tt))
+                                    ]
+                                    [ viewTowerOutsideOfBoard (createTower tt False 0) ]
+                            )
+                            towerData.combinations
+                        )
+                ]
+    in
+    div []
+        [ h3 []
+            [ text "Base towers"
+            ]
+        , div [ class "tower-list" ] (List.map towerBlock Tower.basicTowers)
+        , h3 [ style "margin-top" "30px" ]
+            [ text "Combined towers"
+            ]
+        , div [ class "tower-list" ] (List.map towerBlock Tower.combinedTowers)
+        ]
+
+
+towerInfoClass : Bool -> Bool -> String
+towerInfoClass haveTemporarily have =
+    if have && haveTemporarily then
+        "have have-temporarily"
+
+    else if have then
+        "have"
+
+    else if haveTemporarily then
+        "have-temporarily"
+
+    else
+        ""
+
+
+createTower : TowerType -> Bool -> Int -> Tower
+createTower towerType temporary cellIndex =
+    { totalDamage = 0
+    , cellIndex = cellIndex
+    , cooldown = 0
+    , temporary = temporary
+    , towerType = towerType
+    }
+
+
+viewTowerOutsideOfBoard : Tower -> Html GameMsg
+viewTowerOutsideOfBoard tower =
+    viewTower GameState.Paused False Dict.empty 0 tower
+
+
+viewTower : GameState -> Bool -> Towers -> TowerId -> Tower -> Html GameMsg
+viewTower state selected towers towerId tower =
+    let
+        ( barCount, shouldHaveBlock ) =
+            case tower.towerType of
+                Red1 ->
+                    ( 1, False )
+
+                Red2 ->
+                    ( 2, False )
+
+                Red3 ->
+                    ( 3, False )
+
+                Green1 ->
+                    ( 1, False )
+
+                Green2 ->
+                    ( 2, False )
+
+                Green3 ->
+                    ( 3, False )
+
+                Blue1 ->
+                    ( 1, False )
+
+                Blue2 ->
+                    ( 2, False )
+
+                Blue3 ->
+                    ( 3, False )
+
+                Black1 ->
+                    ( 1, False )
+
+                Black2 ->
+                    ( 2, False )
+
+                Black3 ->
+                    ( 3, False )
+
+                White ->
+                    ( 0, True )
+
+                Teal ->
+                    ( 0, True )
+
+                Purple ->
+                    ( 0, True )
+
+                Orange ->
+                    ( 0, True )
+
+                Grey ->
+                    ( 0, True )
+
+                DarkBlue ->
+                    ( 0, True )
+
+                Pink ->
+                    ( 0, True )
+
+                Yellow ->
+                    ( 0, True )
+
+                Gold ->
+                    ( 0, True )
+
+        towerData =
+            Tower.getTowerData tower.towerType
+
+        bar index =
+            div
+                [ class "bar"
+                , style "bottom" (intToPxString ((index * 6) - 2))
+                , style "background-color" towerData.color
+                ]
+                []
+
+        bars =
+            List.map bar (List.range 1 barCount)
+
+        block =
+            if shouldHaveBlock then
+                div
+                    [ class "block"
+                    , style "background-color" towerData.color
+                    ]
+                    []
+
+            else
+                text ""
+
+        upgrades : List TowerType
+        upgrades =
+            availableUpgrades (List.map .towerType (Dict.values towers)) tower.towerType
+    in
+    div
+        [ class "tower"
+        , class
+            (if tower.temporary then
+                "temporary"
+
+             else
+                ""
+            )
+        , class
+            (if tower.temporary || List.isEmpty upgrades || state /= GameState.Level then
+                ""
+
+             else
+                "upgradable"
+            )
+        ]
+        ([ div
+            ([ class "tower-image" ] ++ imageAttributes "base_tower.png" "26px")
+            []
+         ]
+            ++ bars
+            ++ [ block ]
+            ++ (if selected then
+                    [ div
+                        [ class "tower-range"
+                        , style "width" (intToPxString (towerData.range * 2))
+                        , style "height" (intToPxString (towerData.range * 2))
+                        ]
+                        []
+                    , div
+                        [ class "selection"
+                        , style "width" (intToPxString (cellSize + 5))
+                        , style "height" (intToPxString (cellSize + 5))
+                        ]
+                        []
+                    ]
+                        ++ [ div [ class "action-buttons", actionButtonsPosition tower.cellIndex ]
+                                (case state of
+                                    GameState.Build towersLeft ->
+                                        if tower.temporary then
+                                            if towersLeft == 0 then
+                                                [ button
+                                                    [ stopPropagationOn "click"
+                                                        (Decode.succeed ( KeepTowerClicked towerId, True ))
+                                                    ]
+                                                    [ text "Keep" ]
+                                                ]
+
+                                            else
+                                                []
+
+                                        else
+                                            [ button
+                                                [ onClick (RemoveTowerButtonClicked towerId tower.cellIndex) ]
+                                                [ text "Remove" ]
+                                            ]
+
+                                    GameState.Level ->
+                                        List.map
+                                            (\upgrade ->
+                                                button
+                                                    [ stopPropagationOn "click"
+                                                        (Decode.succeed ( UpgradeTowerClicked towerId upgrade, True ))
+                                                    ]
+                                                    [ text (Tower.getTowerData upgrade).name ]
+                                            )
+                                            upgrades
+
+                                    _ ->
+                                        []
+                                )
+                           ]
+
+                else
+                    []
+               )
+        )
+
+
+availableUpgrades : List TowerType -> TowerType -> List TowerType
+availableUpgrades existingTowerType forTower =
+    let
+        buildable : ( TowerType, List TowerType ) -> Bool
+        buildable ( _, components ) =
+            List.all (\c -> List.member c existingTowerType) components
+                && List.member forTower components
+    in
+    towerCombinations
+        |> List.filter buildable
+        |> List.map Tuple.first
+
+
+selectedCodec : Codec e Selected
+selectedCodec =
+    S.customType
+        (\a b c d value ->
+            case value of
+                TowerSelected data ->
+                    a data
+
+                EnemySelected data ->
+                    b data
+
+                StoneSelected data ->
+                    c data
+
+                NothingSelected ->
+                    d
+        )
+        |> S.variant1 TowerSelected S.int
+        |> S.variant1 EnemySelected S.int
+        |> S.variant1 StoneSelected S.int
+        |> S.variant0 NothingSelected
+        |> S.finishCustomType
+
+
+gameModelCodec : Seed -> Codec e GameModel
+gameModelCodec seed =
+    S.record (GameModel seed)
+        |> S.field .board (S.array Cell.cellCodec)
+        |> S.field .enemies (S.list Enemy.codec)
+        |> S.field .enemyIdCount S.int
+        |> S.field .state GameState.codec
+        |> S.field .selected selectedCodec
+        |> S.field .towerIdCount S.int
+        |> S.field .towers (S.dict S.int Tower.codec)
+        |> S.field .projectiles (S.list Projectile.codec)
+        |> S.field .hp S.int
+        |> S.field .level S.int
+        |> S.finishRecord
+
+
+intToPxString : Int -> String
+intToPxString value =
+    String.fromInt value ++ "px"
+
+
+actionButtonsPosition : Int -> Html.Attribute msg
+actionButtonsPosition cellIndex =
+    let
+        col =
+            modBy boardWidth cellIndex
+
+        row =
+            cellIndex // boardWidth
+    in
+    if col >= boardWidth - 3 then
+        Html.Attributes.style "right" "35px"
+
+    else if row == 0 then
+        Html.Attributes.style "bottom" "-20px"
+
+    else
+        Html.Attributes.style "top" "-20px"
+
+
+imageAttributes : String -> String -> List (Html.Attribute msg)
+imageAttributes image size =
+    [ style "background-image" ("url(%PUBLIC_URL%/images/" ++ image ++ ")")
+    , style "background-position-x" "center"
+    , style "background-position-y" "center"
+    , style "background-size" size
+    , style "background-repeat-x" "no-repeat"
+    , style "background-repeat-y" "no-repeat"
+    ]
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.gameModel.state == Level then
+    if model.gameModel.state == GameState.Level then
         Sub.batch
             [ Time.every (1000 / fps) (always (GameMsg Step))
             , Browser.Events.onResize (\w _ -> GotNewWindowWidth w)
@@ -1664,7 +2152,7 @@ subscriptions model =
         Browser.Events.onResize (\w _ -> GotNewWindowWidth w)
 
 
-main : Program Json.Decode.Value Model Msg
+main : Program Decode.Value Model Msg
 main =
     Browser.element
         { view = view
